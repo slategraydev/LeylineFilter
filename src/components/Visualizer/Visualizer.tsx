@@ -6,7 +6,7 @@ interface VisualizerProps {
   tonality: number[];
 }
 
-function LeylineLogo() {
+export function LeylineLogo() {
   return (
     <div className="logo-container">
       <svg

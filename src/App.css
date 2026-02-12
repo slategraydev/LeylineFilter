@@ -338,19 +338,18 @@ body {
 .leyline {
     stroke: url(#line-grad);
     stroke-width: 0.8;
-    animation: flow 2.4s infinite linear;
 }
 
 .line-1 {
-    animation-delay: 0s;
+    opacity: 0.3;
 }
 
 .line-2 {
-    animation-delay: 0.8s;
+    opacity: 0.5;
 }
 
 .line-3 {
-    animation-delay: 1.6s;
+    opacity: 0.3;
 }
 
 .logo-text {
@@ -384,19 +383,6 @@ body {
     }
 }
 
-@keyframes flow {
-
-    0% {
-        stroke-dashoffset: 100;
-        stroke-dasharray: 20 80;
-    }
-
-    100% {
-        stroke-dashoffset: -100;
-        stroke-dasharray: 20 80;
-    }
-}
-
 /* --- Common Controls --- */
 input[type="range"] {
     appearance: none;
@@ -424,12 +410,12 @@ input[type="range"]::-webkit-slider-thumb:hover {
 /* Add Module Button (Pinned to Bottom Right) */
 .module-card.placeholder {
     position: fixed;
-    bottom: 40px;
-    right: 40px;
+    bottom: 20px;
+    right: 20px;
     border: 1px solid var(--color-accent);
     height: 60px;
     width: 60px;
-    border-radius: 50%;
+    border-radius: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -460,12 +446,19 @@ input[type="range"]::-webkit-slider-thumb:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: var(--font-mono);
-    font-size: 2.5rem;
-    font-weight: 300;
     cursor: pointer;
     padding: 0;
     margin: 0;
+    transition: color 0.2s;
+}
+
+.add-icon {
+    width: 32px;
+    height: 32px;
+    stroke: currentColor;
+    stroke-width: 1px;
+    /* Matches the box border thickness */
+    stroke-linecap: square;
 }
 
 .module-card.placeholder:hover .add-btn {

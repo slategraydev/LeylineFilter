@@ -8,6 +8,7 @@ import { RNNoiseModule } from "./components/Modules/RNNoiseModule";
 import { GainModule } from "./components/Modules/GainModule";
 import { FilterModule } from "./components/Modules/FilterModule";
 import { VisualizerModule } from "./components/Modules/VisualizerModule";
+import { LeylineLogo } from "./components/Visualizer/Visualizer";
 import { EngineControls } from "./components/Engine/EngineControls";
 import {
   ExpanderConfig,
@@ -276,7 +277,12 @@ function App() {
 
         {/* Placeholder for future modules */}
         <div className="module-card placeholder">
-          <button className="add-btn">+</button>
+          <button className="add-btn" aria-label="Add Module">
+            <svg viewBox="0 0 24 24" className="add-icon">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
         </div>
       </main>
     </div>
