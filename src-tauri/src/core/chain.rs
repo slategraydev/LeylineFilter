@@ -1,6 +1,4 @@
-use crate::core::traits::{AudioModule, ModuleConfig, ModuleInfo, EngineState};
-use crate::core::modules::ModuleFactory;
-use std::collections::HashMap;
+use crate::core::traits::{AudioModule, EngineState, ModuleConfig, ModuleInfo};
 
 /// Manages the sequence of audio modules and their processing order.
 pub struct SignalChain {
@@ -23,14 +21,10 @@ impl SignalChain {
         }
     }
 
-    pub fn add_module(&mut self, module_type: &str) -> Option<String> {
-        if let Some(module) = ModuleFactory::create(module_type, self.sample_rate) {
-            let id = module.id().to_string();
-            self.modules.push(module);
-            Some(id)
-        } else {
-            None
-        }
+    pub fn add_module(&mut self, module: Box<dyn AudioModule>) -> String {
+        let id = module.id().to_string();
+        self.modules.push(module);
+        id
     }
 
     pub fn remove_module(&mut self, id: &str) {
@@ -38,24 +32,22 @@ impl SignalChain {
     }
 
     pub fn reorder(&mut self, order: &[String]) {
-        let mut new_modules = Vec::with_capacity(self.modules.len());
-        let mut module_map: HashMap<String, Box<dyn AudioModule>> = self.modules
-            .drain(..)
-            .map(|m| (m.id().to_string(), m))
-            .collect();
+        let mut write_head = 0;
+        for target_id in order {
+            // Find target_id in modules[write_head..]
+            let mut found_index = None;
+            for i in write_head..self.modules.len() {
+                if self.modules[i].id() == target_id {
+                    found_index = Some(i);
+                    break;
+                }
+            }
 
-        for id in order {
-            if let Some(module) = module_map.remove(id) {
-                new_modules.push(module);
+            if let Some(idx) = found_index {
+                self.modules.swap(write_head, idx);
+                write_head += 1;
             }
         }
-
-        // Keep any modules not mentioned in the order at the end
-        for (_, module) in module_map {
-            new_modules.push(module);
-        }
-
-        self.modules = new_modules;
     }
 
     pub fn process(&mut self, audio: &mut [f32]) {
@@ -87,15 +79,17 @@ impl SignalChain {
     }
 
     pub fn get_state(&self, is_running: bool) -> EngineState {
-        let modules = self.modules.iter().map(|m| {
-            ModuleInfo {
+        let modules = self
+            .modules
+            .iter()
+            .map(|m| ModuleInfo {
                 id: m.id().to_string(),
                 name: m.name().to_string(),
                 category: m.category(),
                 enabled: m.is_enabled(),
                 config: m.get_config(),
-            }
-        }).collect();
+            })
+            .collect();
 
         EngineState {
             modules,
@@ -108,14 +102,19 @@ impl SignalChain {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::modules::ModuleFactory;
 
     #[test]
     fn test_chain_management() {
         let mut chain = SignalChain::new(48000.0);
 
         // Add modules
-        let id1 = chain.add_module("Gain").unwrap();
-        let id2 = chain.add_module("Filter").unwrap();
+        let m1 = ModuleFactory::create("Gain", 48000.0).unwrap();
+        let id1 = chain.add_module(m1);
+
+        let m2 = ModuleFactory::create("Filter", 48000.0).unwrap();
+        let id2 = chain.add_module(m2);
+
         assert_eq!(chain.modules().len(), 2);
 
         // Reorder

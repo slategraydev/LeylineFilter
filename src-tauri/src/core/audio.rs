@@ -1,5 +1,6 @@
 use crate::core::chain::SignalChain;
-use crate::core::traits::{EngineCommand, EngineState, ModuleConfig};
+use crate::core::modules::ModuleFactory;
+use crate::core::traits::{AudioModule, EngineCommand, EngineState, ModuleConfig};
 use crate::error::{EngineError, Result as EngineResult};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use crossbeam_channel::{unbounded, Sender};
@@ -7,12 +8,28 @@ use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::HeapRb;
 use rubato::{FastFixedIn, PolynomialDegree, Resampler};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use sysinfo::System;
 
 use crate::core::visualizer::VisualizerState;
+
+// Internal command enum that supports holding Box<dyn AudioModule>
+// This is NOT serializable and is used only between AudioEngine and the Audio Thread.
+pub enum InternalEngineCommand {
+    UpdateConfig(ModuleConfig),
+    AddModule(Box<dyn AudioModule>),
+    RemoveModule(String),
+    SetParam {
+        id: String,
+        param: String,
+        value: f32,
+    },
+    Reorder(Vec<String>),
+    #[allow(dead_code)]
+    MidiEvent(crate::core::traits::MidiMessage),
+}
 
 pub struct StreamWrapper(#[allow(dead_code)] cpal::Stream);
 unsafe impl Send for StreamWrapper {}
@@ -81,7 +98,8 @@ pub struct AudioEngine {
     input_stream: Option<StreamWrapper>,
     output_stream: Option<StreamWrapper>,
     module_configs: Arc<Mutex<HashMap<String, ModuleConfig>>>,
-    command_tx: Arc<Mutex<Option<Sender<EngineCommand>>>>,
+    // Changed to InternalEngineCommand
+    command_tx: Arc<Mutex<Option<Sender<InternalEngineCommand>>>>,
     pub metrics: Arc<EngineMetrics>,
     sys: System,
     pid: sysinfo::Pid,
@@ -93,6 +111,9 @@ pub struct AudioEngine {
     module_latency_samples: Arc<AtomicUsize>,
     chain_state: Arc<Mutex<EngineState>>,
     last_cpu_update: Instant,
+    // Visualizer Thread State
+    vis_thread: Option<std::thread::JoinHandle<()>>,
+    vis_running: Arc<AtomicBool>,
 }
 
 impl AudioEngine {
@@ -121,6 +142,8 @@ impl AudioEngine {
                 sample_rate: 48000.0,
             })),
             last_cpu_update: Instant::now(),
+            vis_thread: None,
+            vis_running: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -137,7 +160,6 @@ impl AudioEngine {
 
         // Chunk size is based on internal sample rate (10ms of internal rate)
         let chunk_size = (self.internal_sample_rate * 0.01) as usize;
-        // This is exactly 10ms by definition, but calculation confirms it
         let chunk_latency_ms = (chunk_size as f32 / self.internal_sample_rate) * 1000.0;
 
         // Ring buffer contains output samples
@@ -167,7 +189,6 @@ impl AudioEngine {
             return self.last_cpu;
         }
 
-        // Refresh only our own process
         self.sys
             .refresh_processes(sysinfo::ProcessesToUpdate::Some(&[self.pid]), true);
         self.last_cpu_update = Instant::now();
@@ -185,7 +206,7 @@ impl AudioEngine {
     }
 
     pub fn send_command(&self, command: EngineCommand) {
-        // Track state changes that should persist across engine restarts
+        // Track persistence
         match &command {
             EngineCommand::UpdateConfig(config) => {
                 let type_name = match config {
@@ -201,12 +222,35 @@ impl AudioEngine {
                     configs.insert(type_name.to_string(), config.clone());
                 }
             }
-            _ => {} // Other commands are transient for now
+            _ => {}
         }
 
-        if let Ok(tx_lock) = self.command_tx.lock() {
-            if let Some(tx) = tx_lock.as_ref() {
-                let _ = tx.send(command);
+        // Translate public EngineCommand to InternalEngineCommand
+        let internal_cmd = match command {
+            EngineCommand::UpdateConfig(c) => Some(InternalEngineCommand::UpdateConfig(c)),
+            EngineCommand::AddModule { module_type } => {
+                // Instantiation happens HERE on the main thread
+                if let Some(module) = ModuleFactory::create(&module_type, self.internal_sample_rate)
+                {
+                    Some(InternalEngineCommand::AddModule(module))
+                } else {
+                    log::warn!("Failed to create module type: {}", module_type);
+                    None
+                }
+            }
+            EngineCommand::RemoveModule { id } => Some(InternalEngineCommand::RemoveModule(id)),
+            EngineCommand::SetParam { id, param, value } => {
+                Some(InternalEngineCommand::SetParam { id, param, value })
+            }
+            EngineCommand::Reorder { order } => Some(InternalEngineCommand::Reorder(order)),
+            EngineCommand::MidiEvent(m) => Some(InternalEngineCommand::MidiEvent(m)),
+        };
+
+        if let Some(cmd) = internal_cmd {
+            if let Ok(tx_lock) = self.command_tx.lock() {
+                if let Some(tx) = tx_lock.as_ref() {
+                    let _ = tx.send(cmd);
+                }
             }
         }
     }
@@ -283,17 +327,18 @@ impl AudioEngine {
 
         self.sample_rate = out_sample_rate as f32;
 
-        // Internal processing sample rate
-        // We run at 48kHz if any module requires it (like RNNoise), otherwise output rate.
+        // Internal processing sample rate setup
         let mut internal_sample_rate = self.sample_rate;
-
         let mut chain = SignalChain::new(internal_sample_rate);
-        use crate::core::modules::ModuleFactory;
 
+        // Initial population of modules
         for module_type in ModuleFactory::available_types() {
-            chain.add_module(module_type);
+            if let Some(m) = ModuleFactory::create(module_type, internal_sample_rate) {
+                chain.add_module(m);
+            }
         }
 
+        // Check requirements
         for m in chain.modules().iter() {
             if let (Some(req_rate), _) = m.requirements() {
                 if req_rate > internal_sample_rate {
@@ -303,21 +348,22 @@ impl AudioEngine {
         }
 
         self.internal_sample_rate = internal_sample_rate;
-
-        // Re-prepare chain with the final chosen internal rate
         chain.set_sample_rate(internal_sample_rate);
 
+        // Apply persisted configs
         if let Ok(configs) = self.module_configs.lock() {
             for (_, config) in configs.iter() {
                 chain.update_config(config);
             }
         }
 
-        let (tx, rx) = unbounded::<EngineCommand>();
+        // Setup Command Channel
+        let (tx, rx) = unbounded::<InternalEngineCommand>();
         if let Ok(mut tx_lock) = self.command_tx.lock() {
             *tx_lock = Some(tx);
         }
 
+        // Shared State
         let metrics = self.metrics.clone();
         let metrics_out = self.metrics.clone();
         let rb_occ_in = self.rb_occupancy.clone();
@@ -331,10 +377,38 @@ impl AudioEngine {
             *state_lock = chain.get_state(true);
         }
 
+        // Setup Audio Ring Buffer
         let rb = HeapRb::<f32>::new((self.sample_rate as usize * 2).max(4800 * 2));
         let (mut producer, mut consumer) = rb.split();
 
-        // Engine-level Resampler In: Input -> Internal
+        // Setup Visualizer Ring Buffer & Thread
+        let vis_rb = HeapRb::<f32>::new(8192);
+        let (mut vis_prod, mut vis_cons) = vis_rb.split();
+
+        self.vis_running.store(true, Ordering::Relaxed);
+        let vis_running_flag = self.vis_running.clone();
+        let vis_metrics = self.metrics.clone();
+        let vis_rate = internal_sample_rate;
+
+        self.vis_thread = Some(std::thread::spawn(move || {
+            let vis_chunk_size = 2048;
+            let mut visualizer = VisualizerState::new(vis_chunk_size);
+            let mut buffer = Vec::with_capacity(vis_chunk_size);
+
+            while vis_running_flag.load(Ordering::Relaxed) {
+                // Drain ring buffer into local buffer
+                while let Some(sample) = vis_cons.try_pop() {
+                    buffer.push(sample);
+                    if buffer.len() >= vis_chunk_size {
+                        visualizer.process(&buffer, vis_rate, &vis_metrics);
+                        buffer.clear();
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(15));
+            }
+        }));
+
+        // Engine-level Resampler In
         let mut resampler_in = if (in_sample_rate - internal_sample_rate as f64).abs() > 1.0 {
             Some(
                 FastFixedIn::<f32>::new(
@@ -350,7 +424,7 @@ impl AudioEngine {
             None
         };
 
-        // Engine-level Resampler Out: Internal -> Output
+        // Engine-level Resampler Out
         let mut resampler_out = if (internal_sample_rate as f64 - out_sample_rate).abs() > 1.0 {
             Some(
                 FastFixedIn::<f32>::new(
@@ -367,7 +441,6 @@ impl AudioEngine {
         };
 
         let internal_chunk_size = (internal_sample_rate * 0.01) as usize;
-        let mut visualizer = VisualizerState::new(internal_chunk_size);
         let mut working_chunk = vec![0.0f32; internal_chunk_size];
         let mut input_accumulator = Vec::with_capacity((in_sample_rate as f32 * 0.1) as usize);
         let mut internal_accumulator = Vec::with_capacity((internal_sample_rate * 0.1) as usize);
@@ -375,6 +448,8 @@ impl AudioEngine {
         let mut resample_buf = vec![vec![0.0f32; 0]];
 
         let chain_state_clone = self.chain_state.clone();
+
+        // --- INPUT STREAM ---
         let input_stream = input_device.build_input_stream(
             &input_config,
             move |data: &[f32], info: &cpal::InputCallbackInfo| {
@@ -383,36 +458,34 @@ impl AudioEngine {
                 let mut chain_changed = false;
                 while let Ok(command) = rx.try_recv() {
                     match command {
-                        EngineCommand::UpdateConfig(config) => {
+                        InternalEngineCommand::UpdateConfig(config) => {
                             chain.update_config(&config);
-                            chain_changed = true; // Still want to update state even if just config
-                        }
-                        EngineCommand::AddModule { module_type } => {
-                            chain.add_module(&module_type);
                             chain_changed = true;
                         }
-                        EngineCommand::RemoveModule { id } => {
+                        InternalEngineCommand::AddModule(module) => {
+                            // Module is already boxed and created!
+                            chain.add_module(module);
+                            chain_changed = true;
+                        }
+                        InternalEngineCommand::RemoveModule(id) => {
                             chain.remove_module(&id);
                             chain_changed = true;
                         }
-                        EngineCommand::SetParam { id, param, value } => {
+                        InternalEngineCommand::SetParam { id, param, value } => {
                             chain.update_module_param(&id, &param, value);
                             chain_changed = true;
                         }
-                        EngineCommand::Reorder { order } => {
+                        InternalEngineCommand::Reorder(order) => {
                             chain.reorder(&order);
                             chain_changed = true;
                         }
-                        EngineCommand::MidiEvent(_midi) => {
-                            // TODO: Pass MIDI to modules
-                        }
+                        InternalEngineCommand::MidiEvent(_midi) => {}
                     }
                 }
 
                 if chain_changed {
                     let total_lat = chain.latency_samples();
                     mod_lat_atomic.store(total_lat, Ordering::Relaxed);
-                    // Update shared state
                     if let Ok(mut state_lock) = chain_state_clone.try_lock() {
                         *state_lock = chain.get_state(true);
                     }
@@ -457,7 +530,8 @@ impl AudioEngine {
 
                     chain.process(&mut working_chunk);
 
-                    visualizer.process(&working_chunk, internal_sample_rate, &metrics);
+                    // Send to visualizer thread (non-blocking push)
+                    vis_prod.push_slice(&working_chunk);
 
                     // Resample Out
                     if let Some(ref mut rs) = resampler_out {
@@ -483,6 +557,7 @@ impl AudioEngine {
             None,
         )?;
 
+        // --- OUTPUT STREAM ---
         let output_stream = output_device.build_output_stream(
             &output_config,
             move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
@@ -532,9 +607,14 @@ impl AudioEngine {
                 *tx_lock = None;
             }
 
-            // Update chain state to reflect stopped status
             if let Ok(mut state_lock) = self.chain_state.lock() {
                 state_lock.is_running = false;
+            }
+
+            // Stop visualizer
+            self.vis_running.store(false, Ordering::Relaxed);
+            if let Some(handle) = self.vis_thread.take() {
+                let _ = handle.join();
             }
 
             log::info!("Audio engine stopped");
@@ -558,5 +638,35 @@ mod tests {
         assert!(engine.input_stream.is_none());
         assert!(engine.output_stream.is_none());
         assert!(!engine.is_running());
+    }
+
+    // Integration test for pipeline logic
+    #[test]
+    fn test_audio_pipeline_throughput() {
+        use crate::core::chain::SignalChain;
+        // This test simulates the processing load of the chain without hardware
+        let mut chain = SignalChain::new(48000.0);
+        // We need a dummy module, Gain is good
+        if let Some(m) = ModuleFactory::create("Gain", 48000.0) {
+            chain.add_module(m);
+        }
+
+        // Simulate 1 second of audio at 48kHz
+        let mut buffer = vec![0.0; 48000];
+        let start = std::time::Instant::now();
+
+        // Process in 10ms chunks (480 samples)
+        for chunk in buffer.chunks_mut(480) {
+            chain.process(chunk);
+        }
+
+        let elapsed = start.elapsed();
+        // Should be VERY fast on any modern machine (microsecond/millisecond scale)
+        // Definitely under 100ms
+        assert!(
+            elapsed.as_millis() < 100,
+            "Processing took too long: {}ms",
+            elapsed.as_millis()
+        );
     }
 }
