@@ -54,10 +54,6 @@ impl AudioModule for ExpanderModule {
         "Expander"
     }
 
-    fn is_enabled(&self) -> bool {
-        self.enabled
-    }
-
     fn prepare(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
         self.update_coefficients();

@@ -6,6 +6,10 @@ export interface ExpanderConfig {
   release_ms: number;
 }
 
+export interface RNNoiseConfig {
+  enabled: boolean;
+}
+
 export interface EngineMetrics {
   latency_ms: number;
   cpu_usage: number;
@@ -14,4 +18,6 @@ export interface EngineMetrics {
   tonality: number[];
 }
 
-export type ModuleConfig = { type: "Expander"; data: ExpanderConfig };
+export type ModuleConfig =
+  | { type: "Expander"; data: ExpanderConfig }
+  | { type: "RNNoise"; data: RNNoiseConfig };

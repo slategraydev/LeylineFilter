@@ -12,6 +12,10 @@ pub enum ModuleConfig {
         attack_ms: f32,
         release_ms: f32,
     },
+    /// Configuration for the standard RNNoise module.
+    RNNoise {
+        enabled: bool,
+    },
     /// Placeholder for no configuration.
     None,
 }
@@ -25,9 +29,6 @@ pub trait AudioModule: Send + Sync {
     #[allow(dead_code)]
     fn name(&self) -> &str;
 
-    /// Returns true if the module is currently active.
-    fn is_enabled(&self) -> bool;
-
     /// Returns the latency introduced by this module in samples.
     fn latency_samples(&self) -> usize { 0 }
 
@@ -36,6 +37,7 @@ pub trait AudioModule: Send + Sync {
     /// This is called before any processing starts or when the sample rate changes.
     /// # Arguments
     /// * `sample_rate` - The sample rate in Hz.
+    #[allow(dead_code)]
     fn prepare(&mut self, sample_rate: f32);
 
     /// Processes a block of audio samples in-place.
