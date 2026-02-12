@@ -9,7 +9,9 @@ interface BaseModuleProps {
   id: string;
   initialPosition: GridPosition;
   heightUnits: number;
+  scale?: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
+  onDrag?: (id: string, pos: GridPosition | null) => void;
   onHeightReport?: (id: string, units: number) => void;
   title: string;
   enabled: boolean;
@@ -18,6 +20,7 @@ interface BaseModuleProps {
   children: React.ReactNode;
   hideToggle?: boolean;
   style?: React.CSSProperties;
+  isNewlyPlaced?: boolean;
 }
 
 /**
@@ -28,7 +31,9 @@ export function BaseModule({
   id,
   initialPosition,
   heightUnits,
+  scale = 1.0,
   onPositionChange,
+  onDrag,
   onHeightReport,
   title,
   enabled,
@@ -37,81 +42,79 @@ export function BaseModule({
   children,
   hideToggle = false,
   style,
+  isNewlyPlaced = false,
 }: BaseModuleProps) {
-  const { gridPosition, isDragging, onMouseDown } = useDraggable(
+  const { dragOffset, isDragging, onMouseDown } = useDraggable(
     initialPosition,
-    (newPos) => onPositionChange(id, newPos)
+    (newPos) => {
+      onPositionChange(id, newPos);
+      if (onDrag) onDrag(id, null);
+    },
+    (newPos) => {
+      if (onDrag) onDrag(id, newPos);
+    },
+    scale
   );
 
   const moduleRef = useRef<HTMLDivElement>(null);
 
-  // Dynamically measure and report height to the nearest grid unit
   useLayoutEffect(() => {
     if (!moduleRef.current || !onHeightReport) return;
 
     const measure = () => {
       const content = moduleRef.current?.querySelector('.module-content') as HTMLElement;
-
       if (content) {
         const children = Array.from(content.children) as HTMLElement[];
         let naturalContentHeight = 0;
-
         if (children.length > 0) {
-          // The natural height of the content is the bottom edge of the last child
-          // plus the bottom padding (1 grid unit).
           const lastChild = children[children.length - 1];
           naturalContentHeight = lastChild.offsetTop + lastChild.offsetHeight + GRID_UNIT_PX;
         } else {
-          // Empty content still has top and bottom padding
           naturalContentHeight = GRID_UNIT_PX * 2;
         }
-
-        // Total height = Header (4 units) + naturalContentHeight
         const headerHeight = GRID_UNIT_PX * 4;
         const totalHeight = headerHeight + naturalContentHeight;
-
-        // Snap to the nearest grid unit
         const units = Math.ceil(totalHeight / GRID_UNIT_PX);
-
         if (units !== heightUnits) {
           onHeightReport(id, units);
         }
       }
     };
 
-    // Observe children because the content container itself is stretched by flex: 1
-    // and won't change size when its children grow/shrink unless they overflow.
     const observer = new ResizeObserver(measure);
     const content = moduleRef.current.querySelector('.module-content');
     if (content) {
-      // Observe the content container for padding/size changes
       observer.observe(content);
-      // Also observe every child to catch internal layout changes
       Array.from(content.children).forEach(child => observer.observe(child));
     }
-
-    // Initial measure
     measure();
-
     return () => observer.disconnect();
-  }, [id, heightUnits, onHeightReport, children]); // Re-run when children structure changes
-  // Apply absolute positioning and z-index
+  }, [id, heightUnits, onHeightReport, children]);
+
+  // Snap instantly while dragging
+  const snappedX = initialPosition.gx + Math.round(dragOffset.x / GRID_UNIT_PX);
+  const snappedY = initialPosition.gy + Math.round(dragOffset.y / GRID_UNIT_PX);
+
+  const displayX = isDragging ? snappedX * GRID_UNIT_PX : initialPosition.gx * GRID_UNIT_PX;
+  const displayY = isDragging ? snappedY * GRID_UNIT_PX : initialPosition.gy * GRID_UNIT_PX;
+
   const combinedStyle: React.CSSProperties = {
     position: 'absolute',
-    left: `${gridPosition.gx * GRID_UNIT_PX}px`,
-    top: `${gridPosition.gy * GRID_UNIT_PX}px`,
+    left: `${displayX}px`,
+    top: `${displayY}px`,
     height: `${heightUnits * GRID_UNIT_PX}px`,
-    zIndex: isDragging ? 100 : 1,
+    zIndex: isDragging ? 1000 : 1,
+    transition: isDragging ? 'none' : 'left 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), top 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)',
     ...style,
   };
 
   return (
     <div
       ref={moduleRef}
-      className={`module-card ${enabled ? 'active' : 'inactive'}`}
+      className={`module-card ${enabled ? 'active' : 'inactive'} ${isDragging ? 'dragging' : ''} ${isNewlyPlaced ? 'newly-placed' : ''}`}
       style={combinedStyle}
     >
-      <div className="module-header" onMouseDown={onMouseDown}>
+      <div className="module-header" onMouseDown={onMouseDown} style={{ cursor: 'grab' }}>
         <div className="header-left" onMouseDown={(e) => e.stopPropagation()}>
           {!hideToggle && (
             <label className="switch">

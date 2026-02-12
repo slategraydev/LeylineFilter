@@ -18,13 +18,13 @@ import {
   ModuleConfig,
 } from "./types";
 import { GridPosition } from "./hooks/useDraggable";
+import { findFreeSlot, calculateScale } from "./utils/layout";
 import {
   GRID_UNIT_PX,
   SIDEBAR_WIDTH_PX,
   MODULE_W_UNITS,
   MODULE_H_UNITS,
-  MODULE_HEIGHTS,
-  GAP_UNITS
+  MODULE_HEIGHTS
 } from "./constants";
 import "./App.css";
 
@@ -47,6 +47,7 @@ function App() {
   const [selectedInput, setSelectedInput] = useState<string>("Default");
   const [selectedOutput, setSelectedOutput] = useState<string>("Default");
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [newlyPlacedId, setNewlyPlacedId] = useState<string | null>(null);
 
   const [positions, setPositions] = useState<Record<string, GridPosition>>(() => {
     const saved = localStorage.getItem("module_positions_grid");
@@ -60,6 +61,8 @@ function App() {
     return {};
   });
 
+  const [scale, setScale] = useState(1.0);
+
   const [moduleHeights, setModuleHeights] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem("module_heights_grid");
     if (saved) {
@@ -72,69 +75,41 @@ function App() {
     return {};
   });
 
-  // Helper to find the next empty slot in the grid (using 1x1 units)
+  // Helper to find the next empty slot in the grid (used only for NEW modules)
   const findNextAvailableSlot = (currentPositions: Record<string, GridPosition>, type: string): GridPosition => {
-    // 20px buffer for scrollbars and right-side breathing room
     const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
-    const availableUnits = Math.floor(availableWidthPx / GRID_UNIT_PX);
+    const maxGx = Math.max(MODULE_W_UNITS, Math.floor(availableWidthPx / GRID_UNIT_PX));
 
-    // Safety check: always allow at least one module width
-    const maxGx = Math.max(MODULE_W_UNITS, availableUnits);
-    const existingIds = Object.keys(currentPositions);
+    const typeMap: Record<string, string> = {};
+    engineState?.modules?.forEach(m => { typeMap[m.id] = m.config.type; });
+    const getH = (mid: string) => moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || "default"] || MODULE_H_UNITS;
 
-    // We need the engineState to look up types of existing modules
-    const moduleTypeMap: Record<string, string> = {};
-    if (engineState) {
-      engineState.modules.forEach(m => {
-        moduleTypeMap[m.id] = m.config.type;
-      });
-    }
-
-    const h = MODULE_HEIGHTS[type] || MODULE_H_UNITS;
-    // If no modules, start at (1,1)
-    if (existingIds.length === 0) return { gx: 1, gy: 1 };
-
-    // Intelligent "Anchor Point" Search:
-    // We check (1,1) and points adjacent to the right/bottom of existing modules.
-    const potentialYs = [1];
-    const potentialXs = [1];
-
-    existingIds.forEach(id => {
-      const pos = currentPositions[id];
-      const mType = moduleTypeMap[id] || "default";
-      const mHeight = moduleHeights[id] || MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
-
-      potentialYs.push(pos.gy + mHeight + GAP_UNITS);
-      potentialXs.push(pos.gx + MODULE_W_UNITS + GAP_UNITS);
-    });
-
-    const uniqueYs = Array.from(new Set(potentialYs)).sort((a, b) => a - b);
-    const uniqueXs = Array.from(new Set(potentialXs)).sort((a, b) => a - b);
-
-    for (const gy of uniqueYs) {
-      for (const gx of uniqueXs) {
-        // Horizontal clipping check
-        if (gx + MODULE_W_UNITS - 1 > maxGx) continue;
-
-        // Check if this slot is blocked by any existing module
-        const isAreaBlocked = existingIds.some(id => {
-          const pos = currentPositions[id];
-          const mType = moduleTypeMap[id] || "default";
-          const mHeight = moduleHeights[id] || MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
-
-          const hOverlap = gx < pos.gx + MODULE_W_UNITS + GAP_UNITS && gx + MODULE_W_UNITS + GAP_UNITS > pos.gx;
-          const vOverlap = gy < pos.gy + mHeight + GAP_UNITS && gy + h + GAP_UNITS > pos.gy;
-          return hOverlap && vOverlap;
-        });
-
-        if (!isAreaBlocked) {
-          return { gx, gy };
-        }
-      }
-    }
-
-    return { gx: 1, gy: 1 };
+    return findFreeSlot(MODULE_HEIGHTS[type] || MODULE_H_UNITS, currentPositions, getH, maxGx);
   };
+
+  // Sync scale when window is resized
+  useEffect(() => {
+    const handleResize = () => {
+      setPositions(prev => {
+        if (Object.keys(prev).length === 0) return prev;
+
+        const typeMap: Record<string, string> = {};
+        engineState?.modules?.forEach(m => { typeMap[m.id] = m.config.type; });
+        const getH = (mid: string) => moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || "default"] || MODULE_H_UNITS;
+
+        const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
+        const availableHeightPx = window.innerHeight - 20;
+        const maxGx = Math.max(MODULE_W_UNITS, Math.floor(availableWidthPx / GRID_UNIT_PX));
+        const maxGy = Math.max(MODULE_H_UNITS, Math.floor(availableHeightPx / GRID_UNIT_PX));
+
+        setScale(calculateScale(prev, getH, maxGx, maxGy));
+        return prev;
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [engineState?.modules, moduleHeights]);
 
   // Sync positions when new modules appear
   useEffect(() => {
@@ -142,9 +117,9 @@ function App() {
 
     setPositions(prev => {
       let changed = false;
+      let newIdToFlash: string | null = null;
       const next = { ...prev };
 
-      // Prune stale positions for modules that no longer exist in the engine
       const currentIds = new Set((engineState.modules || []).map(m => m.id));
       Object.keys(next).forEach(id => {
         if (!currentIds.has(id)) {
@@ -153,97 +128,79 @@ function App() {
         }
       });
 
-      // Add positions for new modules
       engineState.modules?.forEach(m => {
         if (!next[m.id]) {
           const nextSlot = findNextAvailableSlot(next, m.config.type);
           next[m.id] = nextSlot;
+          newIdToFlash = m.id;
           changed = true;
         }
       });
 
       if (changed) {
+        const typeMap: Record<string, string> = {};
+        engineState.modules.forEach(m => { typeMap[m.id] = m.config.type; });
+        const getH = (mid: string) => moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || "default"] || MODULE_H_UNITS;
+
+        const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
+        const availableHeightPx = window.innerHeight - 20;
+        const maxGx = Math.max(MODULE_W_UNITS, Math.floor(availableWidthPx / GRID_UNIT_PX));
+        const maxGy = Math.max(MODULE_H_UNITS, Math.floor(availableHeightPx / GRID_UNIT_PX));
+
+        setScale(calculateScale(next, getH, maxGx, maxGy));
         localStorage.setItem("module_positions_grid", JSON.stringify(next));
+
+        if (newIdToFlash) {
+          setNewlyPlacedId(newIdToFlash);
+          setTimeout(() => setNewlyPlacedId(null), 2000);
+        }
+
         return next;
       }
       return prev;
     });
   }, [engineState?.modules]);
 
+  const handleDrag = (id: string, pos: GridPosition | null) => {
+    if (!pos) return;
+
+    // Recalculate scale in real-time based on the module's MOVING position
+    const typeMap: Record<string, string> = {};
+    engineState?.modules?.forEach(m => {
+      typeMap[m.id] = m.config.type;
+    });
+    const getH = (mid: string) => moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || "default"] || MODULE_H_UNITS;
+
+    const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
+    const availableHeightPx = window.innerHeight - 20;
+    const maxGx = Math.max(MODULE_W_UNITS, Math.floor(availableWidthPx / GRID_UNIT_PX));
+    const maxGy = Math.max(MODULE_H_UNITS, Math.floor(availableHeightPx / GRID_UNIT_PX));
+
+    const tempPositions = { ...positions, [id]: pos };
+    setScale(calculateScale(tempPositions, getH, maxGx, maxGy));
+  };
+
   const handlePositionChange = (id: string, pos: GridPosition) => {
-    setPositions((prev) => {
+    setPositions(prev => {
       const typeMap: Record<string, string> = {};
       engineState?.modules?.forEach(m => {
         typeMap[m.id] = m.config.type;
       });
-
       const getH = (mid: string) => moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || "default"] || MODULE_H_UNITS;
 
-      const next = { ...prev };
-      const myHeight = getH(id);
+      const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
+      const availableHeightPx = window.innerHeight - 20;
+      const maxGx = Math.max(MODULE_W_UNITS, Math.floor(availableWidthPx / GRID_UNIT_PX));
+      const maxGy = Math.max(MODULE_H_UNITS, Math.floor(availableHeightPx / GRID_UNIT_PX));
 
-      // 1. Determine Displacement Type (Horizontal vs Vertical)
-      // If dropped near the left edge, we push everything right.
-      // Otherwise, we find the "pivot" module we are dropping on or near and push down.
-      if (pos.gx <= 5) {
-        const shiftX = MODULE_W_UNITS + GAP_UNITS;
-        Object.keys(next).forEach(mid => {
-          if (mid === id) return;
-          if (next[mid].gx >= pos.gx) {
-            next[mid] = { ...next[mid], gx: next[mid].gx + shiftX };
-          }
-        });
-        next[id] = pos;
-      } else {
-        // Vertical Displacement Logic
-        // Find if we are dropping "on" or "between" modules in this column
-        const colModules = Object.keys(next)
-          .filter(mid => mid !== id && next[mid].gx === pos.gx)
-          .sort((a, b) => next[a].gy - next[b].gy);
-
-        // Find the insertion point: the first module that is at or below our drop point
-        const pivotIndex = colModules.findIndex(mid => {
-          const mPos = next[mid];
-          const mHeight = getH(mid);
-          // We are "on" this module if our top is above its bottom
-          return pos.gy < mPos.gy + mHeight + GAP_UNITS;
-        });
-
-        if (pivotIndex !== -1) {
-          // We found a pivot. Push it and everything below it down.
-          const shiftY = myHeight + GAP_UNITS;
-          for (let i = pivotIndex; i < colModules.length; i++) {
-            const mid = colModules[i];
-            next[mid] = { ...next[mid], gy: next[mid].gy + shiftY };
-          }
-        }
-
-        // Place the dragged module exactly where it was dropped
-        next[id] = pos;
-      }
-
-      // 2. Compaction Pass (Per Column)
-      // This ensures that while we push things down to make room,
-      // they always snap back into a tight chain.
-      const columns = Array.from(new Set(Object.values(next).map(p => p.gx)));
-      columns.forEach(gx => {
-        const colModules = Object.keys(next)
-          .filter(mid => next[mid].gx === gx)
-          .sort((a, b) => next[a].gy - next[b].gy);
-
-        let currentY = 1;
-        colModules.forEach(mid => {
-          const p = next[mid];
-          // Pull up to currentY to ensure no gaps
-          next[mid] = { ...p, gy: currentY };
-          currentY = next[mid].gy + getH(mid) + GAP_UNITS;
-        });
-      });
-
+      const next = { ...prev, [id]: pos };
+      setScale(calculateScale(next, getH, maxGx, maxGy));
       localStorage.setItem("module_positions_grid", JSON.stringify(next));
       return next;
     });
-  }; const toggleEngine = () => {
+  };
+
+  const toggleEngine = () => {
     if (isRunning) {
       stopEngine();
     } else {
@@ -258,42 +215,36 @@ function App() {
   const handleHeightReport = (id: string, units: number) => {
     setModuleHeights(prev => {
       if (prev[id] === units) return prev;
-      const next = { ...prev, [id]: units };
-      localStorage.setItem("module_heights_grid", JSON.stringify(next));
-      return next;
+      const nextHeights = { ...prev, [id]: units };
+      localStorage.setItem("module_heights_grid", JSON.stringify(nextHeights));
+      return nextHeights;
     });
   };
 
-  // Calculate container dimensions based on module positions
   const getGridContentStyle = () => {
     let maxGx = 0;
     let maxGy = 0;
-
-    // Create a temporary map of types from engineState if available
     const typeMap: Record<string, string> = {};
-    engineState?.modules?.forEach(m => {
-      typeMap[m.id] = m.config.type;
-    });
+    engineState?.modules?.forEach(m => { typeMap[m.id] = m.config.type; });
 
     Object.entries(positions).forEach(([id, pos]) => {
       const mType = typeMap[id] || "default";
       const mHeight = moduleHeights[id] || MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
-
       maxGx = Math.max(maxGx, pos.gx + MODULE_W_UNITS);
       maxGy = Math.max(maxGy, pos.gy + mHeight);
     });
 
     return {
-      minWidth: `${maxGx * GRID_UNIT_PX + 40}px`,
-      minHeight: `${maxGy * GRID_UNIT_PX + 100}px`,
+      minWidth: `${maxGx * GRID_UNIT_PX + 20}px`,
+      minHeight: `${maxGy * GRID_UNIT_PX + 20}px`,
       position: 'relative' as const,
+      transform: `scale(${scale})`,
+      transformOrigin: 'top left',
+      transition: 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)',
     };
   };
 
   const renderModule = (module: any) => {
-    // FIX: To prevent the "flash" artifact at (1,1), we check if the position exists.
-    // If not, we don't render it for ONE frame until the useEffect calculates the slot.
-    // This makes the module "pop" into the correct spot immediately.
     const pos = positions[module.id];
     if (!pos) return null;
 
@@ -304,9 +255,12 @@ function App() {
       id: module.id,
       initialPosition: pos,
       heightUnits: mHeight,
+      scale: scale,
       onPositionChange: handlePositionChange,
+      onDrag: handleDrag,
       onHeightReport: handleHeightReport,
       onRemove: () => removeModule(module.id),
+      isNewlyPlaced: newlyPlacedId === module.id,
     };
 
     let moduleComponent = null;
@@ -434,31 +388,32 @@ function App() {
       <main className="module-grid">
         <div className="grid-inner" style={getGridContentStyle()}>
           {engineState?.modules?.map(renderModule)}
-
-          {showAddMenu && (
-            <AddModuleMenu
-              onAdd={(type) => {
-                addModule(type);
-                setShowAddMenu(false);
-              }}
-              onClose={() => setShowAddMenu(false)}
-              existingTypes={(engineState?.modules || []).map(m => m.config.type)}
-            />
-          )}        </div>
-
-        <div className="module-card placeholder">
-          <button
-            className="add-btn"
-            aria-label="Add Module"
-            onClick={() => setShowAddMenu(!showAddMenu)}
-          >
-            <svg viewBox="0 0 24 24" className="add-icon">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
         </div>
       </main>
+
+      {showAddMenu && (
+        <AddModuleMenu
+          onAdd={(type) => {
+            addModule(type);
+            setShowAddMenu(false);
+          }}
+          onClose={() => setShowAddMenu(false)}
+          existingTypes={(engineState?.modules || []).map(m => m.config.type)}
+        />
+      )}
+
+      <div className="module-card placeholder">
+        <button
+          className="add-btn"
+          aria-label="Add Module"
+          onClick={() => setShowAddMenu(!showAddMenu)}
+        >
+          <svg viewBox="0 0 24 24" className="add-icon">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }
