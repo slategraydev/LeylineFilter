@@ -3,9 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEngine } from "./hooks/useEngine";
 import { ExpanderModule } from "./components/Modules/ExpanderModule";
 import { RNNoiseModule } from "./components/Modules/RNNoiseModule";
+import { GainModule } from "./components/Modules/GainModule";
 import { EngineControls } from "./components/Engine/EngineControls";
 import { Visualizer } from "./components/Visualizer/Visualizer";
-import { ExpanderConfig, RNNoiseConfig } from "./types";
+import { ExpanderConfig, RNNoiseConfig, GainConfig } from "./types";
 import "./App.css";
 
 function App() {
@@ -20,6 +21,19 @@ function App() {
 
   const [selectedInput, setSelectedInput] = useState<string>("Default");
   const [selectedOutput, setSelectedOutput] = useState<string>("Default");
+
+  const [gainConfig, setGainConfig] = useState<GainConfig>(() => {
+    const defaults = { enabled: true, gain_db: 0.0 };
+    const saved = localStorage.getItem("gain_config");
+    if (saved) {
+      try {
+        return { ...defaults, ...JSON.parse(saved) };
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return defaults;
+  });
 
   const [expanderConfig, setExpanderConfig] = useState<ExpanderConfig>(() => {
     const defaults = {
@@ -56,6 +70,16 @@ function App() {
     }
     return defaults;
   });
+
+  useEffect(() => {
+    localStorage.setItem("gain_config", JSON.stringify(gainConfig));
+    invoke("update_config", {
+      config: {
+        type: "Gain",
+        data: gainConfig,
+      },
+    });
+  }, [gainConfig]);
 
   useEffect(() => {
     localStorage.setItem("expander_config", JSON.stringify(expanderConfig));
@@ -128,6 +152,7 @@ function App() {
       </aside>
 
       <main className="module-grid">
+        <GainModule config={gainConfig} onChange={setGainConfig} />
         <RNNoiseModule config={rnnoiseConfig} onChange={setRnnoiseConfig} />
         <ExpanderModule config={expanderConfig} onChange={setExpanderConfig} />
 

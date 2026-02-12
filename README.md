@@ -4,6 +4,7 @@ LeylineFilter is a high-performance, modular audio processing engine built with 
 
 ## Features
 
+- **Extensible Module Registry**: A categorical DSP chain supporting Dynamics, Voice, Filters, FX, and Synths.
 - **AI Noise Suppression**: Integration of **RNNoise**, using Gated Recurrent Units (GRU) to suppress non-stationary noise in real-time.
 - **Lock-Free Engine**: Strictly real-time safe audio thread using message passing via `crossbeam-channel` and lock-free ring buffers. No Mutex contention in the audio path.
 - **Smart Resampling Domains**: Engine-level optimization that resamples audio to a unified internal rate (e.g., 48kHz) only when required by the module chain, minimizing CPU usage and maximizing fidelity.
@@ -27,7 +28,12 @@ LeylineFilter is a high-performance, modular audio processing engine built with 
 src-tauri/
 ├── src/
 │   ├── core/           # Core audio logic and DSP modules
-│   │   ├── modules/    # Individual processing modules (Expander, RNNoise)
+│   │   ├── modules/    # Registry-based processing modules
+│   │   │   ├── dynamics/  # Expander, Compressor, Limiter
+│   │   │   ├── voice/     # RNNoise, VAD
+│   │   │   ├── filter/    # HPF, LPF, EQ
+│   │   │   ├── fx/        # Reverb, Delay
+│   │   │   └── utility/   # Gain, AGC
 │   │   ├── audio.rs    # Main Lock-Free Audio Engine
 │   │   └── traits.rs   # AudioModule traits and config enums
 │   ├── utils/          # Utilities (Resampling, Smoothing, Logger)

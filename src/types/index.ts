@@ -10,6 +10,35 @@ export interface RNNoiseConfig {
   enabled: boolean;
 }
 
+export interface GainConfig {
+  enabled: boolean;
+  gain_db: number;
+}
+
+export interface CompressorConfig {
+  enabled: boolean;
+  threshold_db: number;
+  ratio: number;
+  attack_ms: number;
+  release_ms: number;
+  knee_db: number;
+  makeup_gain_db: number;
+}
+
+export interface FilterConfig {
+  enabled: boolean;
+  filter_type: "HPF" | "LPF" | "BPF" | "Notch";
+  frequency: number;
+  q: number;
+}
+
+export interface FXConfig {
+  enabled: boolean;
+  fx_type: "Reverb" | "Delay" | "Chorus" | "Flanger";
+  mix: number;
+  params: Record<string, number>;
+}
+
 export interface EngineMetrics {
   latency_ms: number;
   cpu_usage: number;
@@ -20,4 +49,9 @@ export interface EngineMetrics {
 
 export type ModuleConfig =
   | { type: "Expander"; data: ExpanderConfig }
-  | { type: "RNNoise"; data: RNNoiseConfig };
+  | { type: "RNNoise"; data: RNNoiseConfig }
+  | { type: "Gain"; data: GainConfig }
+  | { type: "Compressor"; data: CompressorConfig }
+  | { type: "Filter"; data: FilterConfig }
+  | { type: "FX"; data: FXConfig }
+  | { type: "None"; data: null };

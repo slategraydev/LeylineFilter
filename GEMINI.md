@@ -9,7 +9,10 @@ This project is a high-performance biometric audio gate built with Rust, Tauri v
 - **Engine-Level Resampling**: The engine optimizes the processing chain by choosing a unified "Internal Sample Rate."
     - Modules report requirements via the `AudioModule::requirements()` trait method.
     - If RNNoise is enabled, the engine resamples the entire input to 48kHz once, processes all modules, and resamples back to the system rate once.
-- **Modular DSP**: All processing logic implements the `AudioModule` trait in `traits.rs`.
+- **Modular DSP (Registry Pattern)**: All processing logic implements the `AudioModule` trait in `traits.rs`. 
+    - Modules are organized into categories (`dynamics`, `voice`, `filter`, `fx`, `synth`, `utility`) in `src-tauri/src/core/modules/`.
+    - The `ModuleFactory` in `modules/mod.rs` handles dynamic instantiation of modules.
+    - Each module provides a unique `id()`, `name()`, and `category()` to the engine.
 - **Async/Sync Boundary**: Tauri commands are `async` and run on the tokio runtime. The `AudioEngine` is managed as global state in `AppState`.
 - **Lifecycle & Cleanup**: The `AudioEngine` implements the `Drop` trait to ensure audio streams are released when the engine is destroyed. Additionally, the application explicitly stops the engine during the `RunEvent::Exit` event in `lib.rs` to guarantee a graceful shutdown and consistent logging.
 

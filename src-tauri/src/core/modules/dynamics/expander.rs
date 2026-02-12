@@ -1,8 +1,9 @@
-use crate::core::traits::{AudioModule, ModuleConfig};
+use crate::core::traits::{AudioModule, ModuleConfig, ModuleCategory};
 use crate::utils::smoothing::ParameterSmoother;
 
 /// An audio expander/gate module that reduces the volume of signals below a threshold.
 pub struct ExpanderModule {
+    id: String,
     threshold: ParameterSmoother,
     ratio: ParameterSmoother,
     attack_ms: f32,
@@ -20,6 +21,7 @@ impl ExpanderModule {
     /// Creates a new `ExpanderModule` with default settings.
     pub fn new(sample_rate: f32) -> Self {
         let mut m = Self {
+            id: "expander_default".to_string(),
             threshold: ParameterSmoother::new(0.08, 10.0, sample_rate),
             ratio: ParameterSmoother::new(2.0, 10.0, sample_rate),
             attack_ms: 10.0,
@@ -50,6 +52,14 @@ impl ExpanderModule {
 impl AudioModule for ExpanderModule {
     fn name(&self) -> &str {
         "Expander"
+    }
+
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn category(&self) -> ModuleCategory {
+        ModuleCategory::Dynamics
     }
 
     fn prepare(&mut self, sample_rate: f32) {
@@ -121,19 +131,19 @@ mod tests {
         let mut expander = ExpanderModule::new(48000.0);
         let config = ModuleConfig::Expander {
             enabled: true,
-            threshold: 0.5,
+            threshold: 0.08, // match default
             ratio: 10.0,
             attack_ms: 1.0,
             release_ms: 1.0,
         };
         expander.update_config(&config);
 
-        // Signal way below threshold
-        let mut samples = vec![0.1f32; 4800]; // 100ms
+        // Signal way below threshold (0.01 < 0.08)
+        let mut samples = vec![0.01f32; 4800]; // 100ms
         expander.process(&mut samples);
 
         // The last sample should be significantly reduced
-        assert!(samples[4799].abs() < 0.1);
+        assert!(samples[4799].abs() < 0.01);
     }
 
     #[test]

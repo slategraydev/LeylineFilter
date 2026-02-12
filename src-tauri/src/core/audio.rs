@@ -2,8 +2,6 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use crate::core::traits::{AudioModule, ModuleConfig};
-use crate::core::modules::expander::ExpanderModule;
-use crate::core::modules::rnnoise::RNNoiseModule;
 use crate::error::{EngineError, Result as EngineResult};
 use rubato::{Resampler, FastFixedIn, PolynomialDegree};
 use std::time::Instant;
@@ -247,6 +245,10 @@ impl AudioEngine {
         let type_name = match &config {
             ModuleConfig::Expander { .. } => "Expander",
             ModuleConfig::RNNoise { .. } => "RNNoise",
+            ModuleConfig::Gain { .. } => "Gain",
+            ModuleConfig::Compressor { .. } => "Compressor",
+            ModuleConfig::Filter { .. } => "Filter",
+            ModuleConfig::FX { .. } => "FX",
             _ => "Unknown",
         };
 
@@ -303,10 +305,15 @@ impl AudioEngine {
         // We run at 48kHz if any module requires it (like RNNoise), otherwise output rate.
         let mut internal_sample_rate = self.sample_rate;
 
-        let mut local_modules: Vec<Box<dyn AudioModule>> = vec![
-            Box::new(ExpanderModule::new(internal_sample_rate)),
-            Box::new(RNNoiseModule::new(internal_sample_rate)),
-        ];
+        use crate::core::modules::ModuleFactory;
+
+        let mut local_modules: Vec<Box<dyn AudioModule>> = Vec::new();
+        for module_type in ModuleFactory::available_types() {
+            if let Some(module) = ModuleFactory::create(module_type, internal_sample_rate) {
+                log::info!("Initialized module: {} (ID: {}, Category: {:?})", module.name(), module.id(), module.category());
+                local_modules.push(module);
+            }
+        }
 
         for m in local_modules.iter() {
             if let (Some(req_rate), _) = m.requirements() {

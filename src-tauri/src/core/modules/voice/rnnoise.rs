@@ -1,10 +1,11 @@
-use crate::core::traits::{AudioModule, ModuleConfig};
+use crate::core::traits::{AudioModule, ModuleConfig, ModuleCategory};
 use crate::utils::resampling::AudioBlockProcessor;
 use crate::utils::smoothing::ParameterSmoother;
 use nnnoiseless::DenoiseState;
 
 /// An audio noise suppression module using the RNNoise algorithm.
 pub struct RNNoiseModule {
+    id: String,
     enabled: bool,
     sample_rate: f32,
     denoiser: Box<DenoiseState<'static>>,
@@ -16,6 +17,7 @@ pub struct RNNoiseModule {
 impl RNNoiseModule {
     pub fn new(sample_rate: f32) -> Self {
         Self {
+            id: "rnnoise_default".to_string(),
             enabled: false,
             sample_rate,
             denoiser: DenoiseState::new(),
@@ -29,6 +31,14 @@ impl RNNoiseModule {
 impl AudioModule for RNNoiseModule {
     fn name(&self) -> &str {
         "RNNoise"
+    }
+
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn category(&self) -> ModuleCategory {
+        ModuleCategory::Voice
     }
 
     fn requirements(&self) -> (Option<f32>, Option<usize>) {
@@ -126,7 +136,7 @@ mod tests {
     fn test_rnnoise_latency() {
         let mut module = RNNoiseModule::new(48000.0);
         assert_eq!(module.latency_samples(), 0); // Disabled by default
-        
+
         module.update_config(&ModuleConfig::RNNoise { enabled: true });
         assert_eq!(module.latency_samples(), 480);
     }
@@ -135,11 +145,11 @@ mod tests {
     fn test_rnnoise_process_optimal() {
         let mut module = RNNoiseModule::new(48000.0);
         module.update_config(&ModuleConfig::RNNoise { enabled: true });
-        
+
         // Fast-path test (48kHz, 480 samples)
         let mut samples = vec![0.1f32; 480];
         module.process(&mut samples);
-        
+
         // Should not be silence immediately due to bypass ramp
         assert!(samples[0].abs() > 0.0);
     }
