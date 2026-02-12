@@ -45,6 +45,7 @@ export interface EngineMetrics {
   input_level: number;
   spectrum: number[];
   tonality: number[];
+  state_version: number;
 }
 
 export interface ModuleInfo {

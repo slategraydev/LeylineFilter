@@ -9,7 +9,7 @@ pub struct SignalChain {
 impl SignalChain {
     pub fn new(sample_rate: f32) -> Self {
         Self {
-            modules: Vec::new(),
+            modules: Vec::with_capacity(32),
             sample_rate,
         }
     }
@@ -27,8 +27,12 @@ impl SignalChain {
         id
     }
 
-    pub fn remove_module(&mut self, id: &str) {
-        self.modules.retain(|m| m.id() != id);
+    pub fn remove_module(&mut self, id: &str) -> Option<Box<dyn AudioModule>> {
+        if let Some(pos) = self.modules.iter().position(|m| m.id() == id) {
+            Some(self.modules.remove(pos))
+        } else {
+            None
+        }
     }
 
     pub fn reorder(&mut self, order: &[String]) {
@@ -128,7 +132,10 @@ mod tests {
         assert!(state.is_running);
 
         // Remove
-        chain.remove_module(&id1);
+        let removed = chain.remove_module(&id1);
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().id(), id1);
+
         assert_eq!(chain.modules().len(), 1);
         assert_eq!(chain.modules()[0].id(), id2);
     }

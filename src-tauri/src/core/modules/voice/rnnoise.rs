@@ -56,7 +56,9 @@ impl AudioModule for RNNoiseModule {
     fn prepare(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
         self.processor.prepare(sample_rate);
-        self.bypass_smoother.set_smoothing_ms(20.0, sample_rate);
+        // RNNoise always processes at 48kHz internally/via processor, so the smoother
+        // must be timed for 48kHz regardless of the external sample rate.
+        self.bypass_smoother.set_smoothing_ms(20.0, 48000.0);
     }
 
     fn update_config(&mut self, config: &ModuleConfig) {

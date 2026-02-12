@@ -94,6 +94,7 @@ pub struct Metrics {
     input_level: f32,
     spectrum: [f32; 12],
     tonality: [f32; 12],
+    state_version: u32,
 }
 
 /// Tauri command to retrieve current engine metrics.
@@ -104,8 +105,11 @@ async fn get_metrics(state: State<'_, AppState>) -> std::result::Result<Metrics,
     // Always update CPU usage
     engine.update_cpu_usage();
 
+    // Process garbage collected from the audio thread
+    engine.process_garbage();
+
     let is_running = engine.is_running();
-    let (_, cpu, level, spectrum, tonality) = engine.metrics.get();
+    let (_, cpu, level, spectrum, tonality, version) = engine.metrics.get();
 
     // If not running, latency should be reported as 0.0
     let latency = if !is_running {
@@ -119,9 +123,9 @@ async fn get_metrics(state: State<'_, AppState>) -> std::result::Result<Metrics,
         input_level: level,
         spectrum,
         tonality,
+        state_version: version,
     })
 }
-
 /// The main entry point for the Tauri application.
 ///
 /// Initializes the global state, sets up the logger, and builds the Tauri application.

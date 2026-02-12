@@ -6,6 +6,9 @@ This project is a high-performance biometric audio gate built with Rust, Tauri v
 - **Real-Time Safety (Lock-Free)**: The audio thread (inside `src-tauri/src/core/audio.rs`) is strictly **lock-free**. 
     - Commands (updates, additions, reordering) are sent from the UI via `crossbeam-channel` using the `EngineCommand` bus.
     - The audio thread maintains its own private state and never waits for a Mutex held by the UI thread.
+    - **No Allocations/Deallocations**: The audio thread must never allocate (malloc) or deallocate (free) memory.
+        - **Pre-allocation**: Containers like `Vec` in `SignalChain` are pre-allocated with sufficient capacity.
+        - **Garbage Collection**: Removed modules are not dropped on the audio thread. They are sent back to the main thread via a `garbage_tx` channel for safe deallocation.
     - State synchronization back to the UI is handled via a `try_lock` protected `EngineState` snapshot.
 - **Signal Chain (Dynamic Graph)**: Modules are managed by a `SignalChain` (in `src-tauri/src/core/chain.rs`).
     - The chain supports dynamic addition, removal, and reordering of modules without stopping the engine.

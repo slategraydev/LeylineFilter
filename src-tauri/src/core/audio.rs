@@ -3,7 +3,7 @@ use crate::core::modules::ModuleFactory;
 use crate::core::traits::{AudioModule, EngineCommand, EngineState, ModuleConfig};
 use crate::error::{EngineError, Result as EngineResult};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use crossbeam_channel::{unbounded, Sender};
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::HeapRb;
 use rubato::{FastFixedIn, PolynomialDegree, Resampler};
@@ -42,6 +42,7 @@ pub struct EngineMetrics {
     pub input_level: AtomicU32,
     pub spectrum: [AtomicU32; 12],
     pub tonality: [AtomicU32; 12],
+    pub state_version: AtomicU32,
 }
 
 impl EngineMetrics {
@@ -54,6 +55,7 @@ impl EngineMetrics {
             input_level: AtomicU32::new(0),
             spectrum: Default::default(),
             tonality: Default::default(),
+            state_version: AtomicU32::new(0),
         }
     }
 
@@ -70,7 +72,7 @@ impl EngineMetrics {
         }
     }
 
-    pub fn get(&self) -> (f32, f32, f32, [f32; 12], [f32; 12]) {
+    pub fn get(&self) -> (f32, f32, f32, [f32; 12], [f32; 12], u32) {
         let mut bins = [0.0f32; 12];
         let mut tonal = [0.0f32; 12];
         for i in 0..12 {
@@ -83,6 +85,7 @@ impl EngineMetrics {
             f32::from_bits(self.input_level.load(Ordering::Relaxed)),
             bins,
             tonal,
+            self.state_version.load(Ordering::Relaxed),
         )
     }
 
@@ -114,6 +117,8 @@ pub struct AudioEngine {
     // Visualizer Thread State
     vis_thread: Option<std::thread::JoinHandle<()>>,
     vis_running: Arc<AtomicBool>,
+    // Garbage Collection for Audio Thread
+    garbage_rx: Option<Receiver<Box<dyn AudioModule>>>,
 }
 
 impl AudioEngine {
@@ -144,6 +149,7 @@ impl AudioEngine {
             last_cpu_update: Instant::now(),
             vis_thread: None,
             vis_running: Arc::new(AtomicBool::new(false)),
+            garbage_rx: None,
         }
     }
 
@@ -287,6 +293,15 @@ impl AudioEngine {
         }
     }
 
+    pub fn process_garbage(&self) {
+        if let Some(rx) = &self.garbage_rx {
+            // Drain the channel and drop modules on this thread (Main Thread)
+            while let Ok(_) = rx.try_recv() {
+                // Module is dropped here
+            }
+        }
+    }
+
     pub fn start(
         &mut self,
         input_device_name: Option<String>,
@@ -362,6 +377,10 @@ impl AudioEngine {
         if let Ok(mut tx_lock) = self.command_tx.lock() {
             *tx_lock = Some(tx);
         }
+
+        // Setup Garbage Collection Channel
+        let (garbage_tx, garbage_rx) = unbounded::<Box<dyn AudioModule>>();
+        self.garbage_rx = Some(garbage_rx);
 
         // Shared State
         let metrics = self.metrics.clone();
@@ -468,7 +487,9 @@ impl AudioEngine {
                             chain_changed = true;
                         }
                         InternalEngineCommand::RemoveModule(id) => {
-                            chain.remove_module(&id);
+                            if let Some(module) = chain.remove_module(&id) {
+                                let _ = garbage_tx.send(module);
+                            }
                             chain_changed = true;
                         }
                         InternalEngineCommand::SetParam { id, param, value } => {
@@ -488,6 +509,7 @@ impl AudioEngine {
                     mod_lat_atomic.store(total_lat, Ordering::Relaxed);
                     if let Ok(mut state_lock) = chain_state_clone.try_lock() {
                         *state_lock = chain.get_state(true);
+                        metrics.state_version.fetch_add(1, Ordering::Relaxed);
                     }
                 }
 
@@ -668,5 +690,26 @@ mod tests {
             "Processing took too long: {}ms",
             elapsed.as_millis()
         );
+    }
+
+    #[test]
+    fn test_garbage_collection_mechanism() {
+        let mut engine = AudioEngine::new();
+        let (tx, rx) = unbounded();
+        engine.garbage_rx = Some(rx);
+
+        // Create a dummy module and send it to the garbage channel
+        if let Some(m) = ModuleFactory::create("Gain", 48000.0) {
+            tx.send(m).unwrap();
+        }
+
+        // Channel should not be empty
+        assert!(!engine.garbage_rx.as_ref().unwrap().is_empty());
+
+        // Run garbage collector
+        engine.process_garbage();
+
+        // Channel should be empty now
+        assert!(engine.garbage_rx.as_ref().unwrap().is_empty());
     }
 }

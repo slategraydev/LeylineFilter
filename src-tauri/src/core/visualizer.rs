@@ -2,25 +2,68 @@ use crate::core::audio::EngineMetrics;
 use rustfft::{num_complex::Complex, Fft, FftPlanner};
 use std::sync::Arc;
 
+struct BinRange {
+    start: usize,
+    end: usize,
+}
+
 /// Pre-allocated state for audio visualization to ensure real-time safety.
 pub struct VisualizerState {
     fft: Arc<dyn Fft<f32>>,
     fft_buffer: Vec<Complex<f32>>,
     scratch_buffer: Vec<Complex<f32>>,
+    bin_ranges: [BinRange; 12],
+    sample_rate: f32,
+    chunk_size: usize,
 }
 
 impl VisualizerState {
     pub fn new(chunk_size: usize) -> Self {
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(chunk_size);
-        Self {
+
+        let mut state = Self {
             fft_buffer: vec![Complex::default(); chunk_size],
             scratch_buffer: vec![Complex::default(); fft.get_inplace_scratch_len()],
             fft,
+            bin_ranges: [const { BinRange { start: 0, end: 0 } }; 12],
+            sample_rate: 48000.0, // Default, will update on process
+            chunk_size,
+        };
+        state.recalculate_bins(48000.0);
+        state
+    }
+
+    fn recalculate_bins(&mut self, sample_rate: f32) {
+        self.sample_rate = sample_rate;
+        let num_bins = self.fft_buffer.len() / 2;
+        if num_bins == 0 {
+            return;
+        }
+
+        let f_min = 80.0f32;
+        let f_max = 20000.0f32;
+        let bin_sz = sample_rate / self.chunk_size as f32;
+
+        for i in 0..12 {
+            let freq_start = f_min * (f_max / f_min).powf(i as f32 / 12.0);
+            let freq_end = f_min * (f_max / f_min).powf((i + 1) as f32 / 12.0);
+
+            let start_bin = (freq_start / bin_sz).floor() as usize;
+            let end_bin = (freq_end / bin_sz).ceil() as usize;
+
+            self.bin_ranges[i] = BinRange {
+                start: start_bin.min(num_bins),
+                end: end_bin.max(start_bin + 1).min(num_bins),
+            };
         }
     }
 
     pub fn process(&mut self, chunk: &[f32], sample_rate: f32, metrics: &EngineMetrics) {
+        if (sample_rate - self.sample_rate).abs() > 1.0 {
+            self.recalculate_bins(sample_rate);
+        }
+
         for (i, &sample) in chunk.iter().enumerate() {
             if i < self.fft_buffer.len() {
                 self.fft_buffer[i] = Complex {
@@ -38,25 +81,13 @@ impl VisualizerState {
         let num_bins = self.fft_buffer.len() / 2;
 
         if num_bins > 0 {
-            let f_min = 80.0f32;
-            let f_max = 20000.0f32;
-            let bin_sz = sample_rate / chunk.len() as f32;
-
             for i in 0..12 {
-                let freq_start = f_min * (f_max / f_min).powf(i as f32 / 12.0);
-                let freq_end = f_min * (f_max / f_min).powf((i + 1) as f32 / 12.0);
-
-                let start_bin = (freq_start / bin_sz).floor() as usize;
-                let end_bin = (freq_end / bin_sz).ceil() as usize;
-
-                let start_bin = start_bin.min(num_bins);
-                let end_bin = end_bin.max(start_bin + 1).min(num_bins);
-
+                let range = &self.bin_ranges[i];
                 let mut sum = 0.0f32;
                 let mut max_bin_val = 0.0f32;
-                let count = (end_bin - start_bin).max(1);
+                let count = (range.end - range.start).max(1);
 
-                for b in start_bin..end_bin {
+                for b in range.start..range.end {
                     let val = self.fft_buffer[b].norm();
                     sum += val;
                     if val > max_bin_val {
@@ -111,5 +142,44 @@ mod tests {
         // Check if latency was NOT touched (should remain 0)
         let latency = f32::from_bits(metrics.latency_ms.load(Ordering::Relaxed));
         assert_eq!(latency, 0.0);
+    }
+
+    #[test]
+    fn test_bin_range_validity() {
+        let chunk_size = 2048;
+        let mut visualizer = VisualizerState::new(chunk_size);
+        let num_bins = chunk_size / 2;
+
+        // Test at 48kHz
+        visualizer.recalculate_bins(48000.0);
+        for i in 0..12 {
+            let range = &visualizer.bin_ranges[i];
+            assert!(
+                range.start <= range.end,
+                "Bin range start > end at index {}",
+                i
+            );
+            assert!(
+                range.end <= num_bins,
+                "Bin range end out of bounds at index {}",
+                i
+            );
+        }
+
+        // Test at 96kHz
+        visualizer.recalculate_bins(96000.0);
+        for i in 0..12 {
+            let range = &visualizer.bin_ranges[i];
+            assert!(
+                range.start <= range.end,
+                "Bin range start > end at index {}",
+                i
+            );
+            assert!(
+                range.end <= num_bins,
+                "Bin range end out of bounds at index {}",
+                i
+            );
+        }
     }
 }
