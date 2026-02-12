@@ -2091,6 +2091,7 @@ dependencies = [
  "log",
  "ringbuf",
  "rubato",
+ "rustfft",
  "serde",
  "serde_json",
  "tauri",

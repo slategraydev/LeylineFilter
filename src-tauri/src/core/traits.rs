@@ -9,6 +9,8 @@ pub enum ModuleConfig {
         enabled: bool,
         threshold: f32,
         ratio: f32,
+        attack_ms: f32,
+        release_ms: f32,
     },
     /// Placeholder for no configuration.
     None,

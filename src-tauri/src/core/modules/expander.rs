@@ -40,13 +40,20 @@ impl AudioModule for ExpanderModule {
     }
 
     fn update_config(&mut self, config: &ModuleConfig) {
-        if let ModuleConfig::Expander { enabled, threshold, ratio } = config {
+        if let ModuleConfig::Expander { enabled, threshold, ratio, attack_ms, release_ms } = config {
             self.enabled = *enabled;
             // Ensure threshold is between 0 and 1
             self.threshold = threshold.clamp(0.0, 1.0);
             // Ratio must be at least 1.0
             self.ratio = ratio.max(1.0);
-            log::debug!("Expander updated: enabled={}, threshold={}, ratio={}", self.enabled, self.threshold, self.ratio);
+
+            self.attack_ms = attack_ms.clamp(0.1, 1000.0);
+            self.release_ms = release_ms.clamp(1.0, 5000.0);
+
+            log::debug!(
+                "Expander updated: enabled={}, threshold={}, ratio={}, attack={}ms, release={}ms",
+                self.enabled, self.threshold, self.ratio, self.attack_ms, self.release_ms
+            );
         }
     }
 

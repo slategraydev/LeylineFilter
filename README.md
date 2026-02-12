@@ -20,6 +20,7 @@ LeylineFilter is a high-performance, modular audio processing engine built with 
 
 ## Project Structure
 
+### Backend (src-tauri/)
 ```text
 src-tauri/
 ├── src/
@@ -32,6 +33,19 @@ src-tauri/
 │   ├── lib.rs          # Tauri command handlers and state management
 │   └── main.rs         # Application entry point
 └── Cargo.toml          # Rust dependencies and configuration
+```
+
+### Frontend (src/)
+```text
+src/
+├── components/         # Modular UI components
+│   ├── Engine/         # Engine control and device selection
+│   ├── Modules/        # Audio processing module UI (Expander, etc.)
+│   └── Visualizer/     # Real-time status visualization
+├── hooks/              # Custom React hooks (useEngine, etc.)
+├── types/              # Shared TypeScript definitions
+├── App.tsx             # Main layout and module orchestration
+└── App.css             # Global and layout-specific styling
 ```
 
 ## Getting Started

@@ -66,17 +66,23 @@ async fn stop_engine(state: State<'_, AppState>) -> std::result::Result<(), Stri
 pub struct Metrics {
     latency_ms: f32,
     cpu_usage: f32,
+    input_level: f32,
+    spectrum: [f32; 12],
+    tonality: [f32; 12],
 }
 
 /// Tauri command to retrieve current engine metrics.
 #[tauri::command]
 async fn get_metrics(state: State<'_, AppState>) -> std::result::Result<Metrics, String> {
     let engine = state.engine.lock().map_err(|e| e.to_string())?;
-    let (latency, cpu) = engine.metrics.get();
+    let (latency, cpu, level, spectrum, tonality) = engine.metrics.get();
 
     Ok(Metrics {
         latency_ms: (latency * 100.0).round() / 100.0,
         cpu_usage: (cpu * 10.0).round() / 10.0,
+        input_level: level,
+        spectrum,
+        tonality,
     })
 }
 

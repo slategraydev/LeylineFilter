@@ -25,6 +25,12 @@ pub struct EngineMetrics {
     pub latency_ms: AtomicU32,
     /// Estimated CPU usage as a percentage.
     pub cpu_usage: AtomicU32,
+    /// Peak RMS or level for visualization.
+    pub input_level: AtomicU32,
+    /// Frequency spectrum bins (12 bins for the UI).
+    pub spectrum: [AtomicU32; 12],
+    /// Tonality/Harmonicity bins (12 bins).
+    pub tonality: [AtomicU32; 12],
 }
 
 impl EngineMetrics {
@@ -32,18 +38,35 @@ impl EngineMetrics {
         Self {
             latency_ms: AtomicU32::new(0),
             cpu_usage: AtomicU32::new(0),
+            input_level: AtomicU32::new(0),
+            spectrum: Default::default(),
+            tonality: Default::default(),
         }
     }
 
-    fn update(&self, latency: f32, cpu: f32) {
+    fn update(&self, latency: f32, cpu: f32, level: f32, bins: &[f32; 12], tonality: &[f32; 12]) {
         self.latency_ms.store(latency.to_bits(), Ordering::Relaxed);
         self.cpu_usage.store(cpu.to_bits(), Ordering::Relaxed);
+        self.input_level.store(level.to_bits(), Ordering::Relaxed);
+        for i in 0..12 {
+            self.spectrum[i].store(bins[i].to_bits(), Ordering::Relaxed);
+            self.tonality[i].store(tonality[i].to_bits(), Ordering::Relaxed);
+        }
     }
 
-    pub fn get(&self) -> (f32, f32) {
+    pub fn get(&self) -> (f32, f32, f32, [f32; 12], [f32; 12]) {
+        let mut bins = [0.0f32; 12];
+        let mut tonal = [0.0f32; 12];
+        for i in 0..12 {
+            bins[i] = f32::from_bits(self.spectrum[i].load(Ordering::Relaxed));
+            tonal[i] = f32::from_bits(self.tonality[i].load(Ordering::Relaxed));
+        }
         (
             f32::from_bits(self.latency_ms.load(Ordering::Relaxed)),
             f32::from_bits(self.cpu_usage.load(Ordering::Relaxed)),
+            f32::from_bits(self.input_level.load(Ordering::Relaxed)),
+            bins,
+            tonal,
         )
     }
 }
@@ -222,6 +245,8 @@ impl AudioEngine {
     }
 }
 
+use rustfft::{FftPlanner, num_complex::Complex};
+
 /// Processes a single chunk of audio through all active modules.
 fn process_audio_chunk<P: Producer<Item = f32>>(
     chunk: &[f32],
@@ -232,24 +257,102 @@ fn process_audio_chunk<P: Producer<Item = f32>>(
     let start = Instant::now();
     let mut working_chunk = chunk.to_vec();
 
-    // Process all modules in sequence.
-    // Note: Locking here is still necessary for dynamic module management,
-    // but we use try_lock to avoid blocking the audio thread if possible,
-    // though in a simple engine like this, a Mutex is often acceptable
-    // if contention is low. For a more advanced engine, we'd use a
-    // message-passing system to update modules.
     if let Ok(mut modules_lock) = modules.try_lock() {
         for module in modules_lock.iter_mut() {
             module.process(&mut working_chunk);
         }
     }
 
-    // Push processed samples to the output ring buffer
     producer.push_slice(&working_chunk);
 
-    let elapsed = start.elapsed().as_secs_f32() * 1000.0;
-    // Update metrics using atomic operations
-    metrics.update(elapsed, (elapsed / 10.0) * 100.0);
+    // Peak level calculation
+    let mut peak = 0.0f32;
+    for &sample in &working_chunk {
+        let abs = sample.abs();
+        if abs > peak {
+            peak = abs;
+        }
+    }
+
+    // FFT Analysis for true frequency visualization
+    let mut planner = FftPlanner::new();
+    let fft = planner.plan_fft_forward(working_chunk.len());
+
+    let mut buffer: Vec<Complex<f32>> = working_chunk
+        .iter()
+        .map(|&s| Complex { re: s, im: 0.0 })
+        .collect();
+
+    fft.process(&mut buffer);
+
+        // Map FFT bins to 12 UI bars (logarithmic distribution)
+        let mut spectrum_bins = [0.0f32; 12];
+        let mut tonality_bins = [0.0f32; 12];
+        let num_bins = buffer.len() / 2; // Nyquist limit (e.g., 240 bins for 48k SR)
+
+            if num_bins > 0 {
+                // Logarithmic distribution: Every bar covers an equal musical interval (octaves).
+                // We map from ~80Hz to ~20kHz.
+                // With a 480 chunk size at 48kHz, each bin is 100Hz.
+                let f_min = 80.0f32;
+                let f_max = 20000.0f32;
+                let bin_sz = 48000.0 / chunk.len() as f32;
+
+                for i in 0..12 {
+                    // Calculate frequency boundaries for this logarithmic bucket
+                    let freq_start = f_min * (f_max / f_min).powf(i as f32 / 12.0);
+                    let freq_end = f_min * (f_max / f_min).powf((i + 1) as f32 / 12.0);
+
+                    let start_bin = (freq_start / bin_sz).floor() as usize;
+                    let end_bin = (freq_end / bin_sz).ceil() as usize;
+
+                    // Clamp to valid range
+                    let start_bin = start_bin.min(num_bins);
+                    let end_bin = end_bin.max(start_bin + 1).min(num_bins);
+
+                    let mut sum = 0.0f32;
+                    let mut max_bin_val = 0.0f32;
+                    let count = (end_bin - start_bin).max(1);
+
+                    for b in start_bin..end_bin {
+                        let val = buffer[b].norm();
+                        sum += val;
+                        if val > max_bin_val {
+                            max_bin_val = val;
+                        }
+                    }
+
+                                let avg = sum / count as f32;
+
+                                // Normalize FFT magnitude by the number of bins (N/2)
+                                // This ensures a full-scale sine wave results in a value of ~1.0
+                                let normalized_mag = avg / (num_bins as f32);
+
+                                            // Convert to decibels (dB)
+                                            // -60dB is a standard floor for UI meters
+                                            let db = 20.0 * normalized_mag.max(1e-6).log10();
+
+                                            // Map -60dB..0dB to 0.0..1.0
+                                            let linear_val = ((db + 60.0) / 60.0).clamp(0.0, 1.0);
+
+                                            // Apply a square root (quadratic) curve to the linear value.
+                                            // This makes the meter 'stay high' longer and gives more
+                                            // visual resolution to the quieter parts of the signal.
+                                            let normalized_val = linear_val.sqrt();
+
+                                            spectrum_bins[i] = normalized_val;
+                                                                            if avg > 1e-6 {
+                                                                                let ratio = max_bin_val / avg;
+                                                                                // Normalize the ratio requirement based on how many bins are in this bucket.
+                                                                                // Wider buckets (high end) require a higher ratio to be considered 'tonal'.
+                                                                                let threshold = (count as f32).sqrt().max(2.0);
+                                                                                tonality_bins[i] = (ratio / (threshold * 1.5)).min(1.0);
+                                                                            }
+
+                            }
+                        }
+                            let elapsed = start.elapsed().as_secs_f32() * 1000.0;
+    metrics.update(elapsed, (elapsed / 10.0) * 100.0, peak, &spectrum_bins, &tonality_bins);
 }
 
 #[cfg(test)]
@@ -262,9 +365,12 @@ mod tests {
         assert!(engine.input_stream.is_none());
         assert!(engine.output_stream.is_none());
 
-        let (latency, cpu) = engine.metrics.get();
+        let (latency, cpu, level, spectrum, tonality) = engine.metrics.get();
         assert_eq!(latency, 0.0);
         assert_eq!(cpu, 0.0);
+        assert_eq!(level, 0.0);
+        assert_eq!(spectrum, [0.0f32; 12]);
+        assert_eq!(tonality, [0.0f32; 12]);
     }
 
     #[test]
@@ -274,6 +380,8 @@ mod tests {
             enabled: false,
             threshold: 0.5,
             ratio: 10.0,
+            attack_ms: 5.0,
+            release_ms: 50.0,
         };
 
         engine.update_module_config(config);
