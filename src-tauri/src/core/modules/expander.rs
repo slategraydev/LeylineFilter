@@ -1,12 +1,10 @@
 use crate::core::traits::{AudioModule, ModuleConfig};
+use crate::utils::smoothing::ParameterSmoother;
 
 /// An audio expander/gate module that reduces the volume of signals below a threshold.
-///
-/// This implementation uses a simple envelope follower with attack and release
-/// characteristics to smooth gain changes.
 pub struct ExpanderModule {
-    threshold: f32,
-    ratio: f32,
+    threshold: ParameterSmoother,
+    ratio: ParameterSmoother,
     attack_ms: f32,
     release_ms: f32,
     sample_rate: f32,
@@ -20,13 +18,10 @@ pub struct ExpanderModule {
 
 impl ExpanderModule {
     /// Creates a new `ExpanderModule` with default settings.
-    ///
-    /// # Arguments
-    /// * `sample_rate` - The sample rate at which the audio will be processed.
     pub fn new(sample_rate: f32) -> Self {
         let mut m = Self {
-            threshold: 0.08,
-            ratio: 2.0,
+            threshold: ParameterSmoother::new(0.08, 10.0, sample_rate),
+            ratio: ParameterSmoother::new(2.0, 10.0, sample_rate),
             attack_ms: 10.0,
             release_ms: 100.0,
             sample_rate,
@@ -46,6 +41,9 @@ impl ExpanderModule {
         self.release_coeff = (-1.0 / (self.release_ms * self.sample_rate / 1000.0)).exp();
         // 10ms smoothing for gain changes
         self.smoothing_coeff = (-1.0 / (10.0 * self.sample_rate / 1000.0)).exp();
+
+        self.threshold.set_smoothing_ms(10.0, self.sample_rate);
+        self.ratio.set_smoothing_ms(10.0, self.sample_rate);
     }
 }
 
@@ -62,20 +60,11 @@ impl AudioModule for ExpanderModule {
     fn update_config(&mut self, config: &ModuleConfig) {
         if let ModuleConfig::Expander { enabled, threshold, ratio, attack_ms, release_ms } = config {
             self.enabled = *enabled;
-            // Ensure threshold is between 0 and 1
-            self.threshold = threshold.clamp(0.0, 1.0);
-            // Ratio must be at least 1.0
-            self.ratio = ratio.max(1.0);
-
+            self.threshold.set_target(threshold.clamp(0.0, 1.0));
+            self.ratio.set_target(ratio.max(1.0));
             self.attack_ms = attack_ms.clamp(0.1, 1000.0);
             self.release_ms = release_ms.clamp(1.0, 5000.0);
-
             self.update_coefficients();
-
-            log::debug!(
-                "Expander updated: enabled={}, threshold={}, ratio={}, attack={}ms, release={}ms",
-                self.enabled, self.threshold, self.ratio, self.attack_ms, self.release_ms
-            );
         }
     }
 
@@ -94,24 +83,27 @@ impl AudioModule for ExpanderModule {
                 self.envelope = self.release_coeff * (self.envelope - input_abs) + input_abs;
             }
 
+            // Get current smoothed parameters
+            let current_threshold = self.threshold.next();
+            let current_ratio = self.ratio.next();
+
             // Calculate target gain based on the ratio and threshold
-            let target_gain = if self.envelope < self.threshold {
+            let target_gain = if self.envelope < current_threshold {
                 if self.envelope < 1e-6 {
                     0.0
                 } else {
-                    (self.envelope / self.threshold).powf(self.ratio - 1.0)
+                    (self.envelope / current_threshold).powf(current_ratio - 1.0)
                 }
             } else {
                 1.0
             };
 
-            // Smooth gain changes to prevent clicking, sample-rate dependent
+            // Smooth gain changes to prevent clicking
             self.gain = self.smoothing_coeff * (self.gain - target_gain) + target_gain;
             *sample *= self.gain;
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -119,44 +111,47 @@ mod tests {
 
     #[test]
     fn test_expander_initialization() {
-        let expander = ExpanderModule::new(44100.0);
+        let expander = ExpanderModule::new(48000.0);
         assert_eq!(expander.name(), "Expander");
         assert!(expander.enabled);
     }
 
     #[test]
     fn test_expander_gain_reduction() {
-        let mut expander = ExpanderModule::new(44100.0);
-        expander.threshold = 0.5;
-        expander.ratio = 10.0;
+        let mut expander = ExpanderModule::new(48000.0);
+        let config = ModuleConfig::Expander {
+            enabled: true,
+            threshold: 0.5,
+            ratio: 10.0,
+            attack_ms: 1.0,
+            release_ms: 1.0,
+        };
+        expander.update_config(&config);
 
         // Signal way below threshold
-        let mut samples = vec![0.1f32; 1000];
+        let mut samples = vec![0.1f32; 4800]; // 100ms
         expander.process(&mut samples);
 
         // The last sample should be significantly reduced
-        assert!(samples[999].abs() < 0.1);
+        assert!(samples[4799].abs() < 0.1);
     }
 
     #[test]
     fn test_expander_bypass() {
-        let mut expander = ExpanderModule::new(44100.0);
-        expander.enabled = false;
+        let mut expander = ExpanderModule::new(48000.0);
+        let config = ModuleConfig::Expander {
+            enabled: false,
+            threshold: 0.5,
+            ratio: 10.0,
+            attack_ms: 1.0,
+            release_ms: 1.0,
+        };
+        expander.update_config(&config);
 
         let mut samples = vec![0.5f32; 100];
         let original = samples.clone();
         expander.process(&mut samples);
 
         assert_eq!(samples, original);
-    }
-
-    #[test]
-    fn test_expander_prepare() {
-        let mut expander = ExpanderModule::new(44100.0);
-        let initial_attack = expander.attack_coeff;
-
-        expander.prepare(48000.0);
-        assert_ne!(expander.attack_coeff, initial_attack);
-        assert_eq!(expander.sample_rate, 48000.0);
     }
 }

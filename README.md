@@ -1,16 +1,15 @@
 # LeylineFilter
 
-LeylineFilter is a high-performance, modular audio processing engine built with Rust and Tauri. It provides real-time biometric sound gating and expansion with low latency and minimal CPU overhead.
+LeylineFilter is a high-performance, modular audio processing engine built with Rust and Tauri. It provides real-time noise suppression and biometric sound gating with professional-grade stability and audio quality.
 
 ## Features
 
-- **Modular Architecture**: Easily extensible audio processing pipeline with a lifecycle-aware `prepare` hook for modules.
-- **Graceful Shutdown**: Automatic and explicit management of audio streams ensures resources are released gracefully when the application closes.
-- **Sample Rate Independence**: Full support for arbitrary hardware sample rates (44.1kHz, 48kHz, 96kHz, etc.) with automatic engine adaptation.
-- **Real-time Safety**: Lock-free audio threading for glitch-free performance.
-- **Low Latency**: Optimized DSP routines and smart resampling that only engages when hardware input/output rates differ.
-- **Cross-Platform**: Built on Tauri for a lightweight, native experience on Windows, macOS, and Linux.
-- **Biometric Sound Gate**: Advanced expander module designed for biometric audio filtering.
+- **AI Noise Suppression**: Integration of **RNNoise**, using Gated Recurrent Units (GRU) to suppress non-stationary noise in real-time.
+- **Lock-Free Engine**: Strictly real-time safe audio thread using message passing via `crossbeam-channel` and lock-free ring buffers. No Mutex contention in the audio path.
+- **Smart Resampling Domains**: Engine-level optimization that resamples audio to a unified internal rate (e.g., 48kHz) only when required by the module chain, minimizing CPU usage and maximizing fidelity.
+- **De-clicked Parameters**: All parameter changes (thresholds, ratios, bypass toggles) use exponential smoothing and cross-fading to prevent digital clicks and pops.
+- **Sample Rate Independence**: Full support for arbitrary hardware sample rates with automatic engine adaptation and high-quality resampling via `rubato`.
+- **Cross-Platform**: Built on Tauri v2 for a lightweight experience on Windows, macOS, and Linux.
 
 ## Tech Stack
 
@@ -18,8 +17,8 @@ LeylineFilter is a high-performance, modular audio processing engine built with 
 - **Frontend**: [React](https://reactjs.org/) with [TypeScript](https://www.typescriptlang.org/)
 - **Framework**: [Tauri v2](https://tauri.app/)
 - **Audio I/O**: [CPAL](https://github.com/RustAudio/cpal)
+- **Noise Suppression**: [nnnoiseless](https://github.com/shrit/nnnoiseless) (RNNoise)
 - **DSP/Resampling**: [Rubato](https://github.com/HesselM/rubato)
-- **Monitoring**: [sysinfo](https://github.com/GuillaumeGomez/sysinfo)
 
 ## Project Structure
 
@@ -28,53 +27,21 @@ LeylineFilter is a high-performance, modular audio processing engine built with 
 src-tauri/
 ├── src/
 │   ├── core/           # Core audio logic and DSP modules
-│   │   ├── modules/    # Individual processing modules (Expander, etc.)
-│   │   ├── audio.rs    # Main Audio Engine implementation
-│   │   └── traits.rs   # Common traits and configurations
-│   ├── utils/          # Utility functions and logging
-│   ├── error.rs        # Custom error handling
-│   ├── lib.rs          # Tauri command handlers and state management
-│   └── main.rs         # Application entry point
-└── Cargo.toml          # Rust dependencies and configuration
-```
-
-### Frontend (src/)
-```text
-src/
-├── components/         # Modular UI components
-│   ├── Engine/         # Engine control and device selection
-│   ├── Modules/        # Audio processing module UI (Expander, etc.)
-│   └── Visualizer/     # Real-time status visualization
-├── hooks/              # Custom React hooks (useEngine, etc.)
-├── types/              # Shared TypeScript definitions
-├── App.tsx             # Main layout and module orchestration
-└── App.css             # Global and layout-specific styling
+│   │   ├── modules/    # Individual processing modules (Expander, RNNoise)
+│   │   ├── audio.rs    # Main Lock-Free Audio Engine
+│   │   └── traits.rs   # AudioModule traits and config enums
+│   ├── utils/          # Utilities (Resampling, Smoothing, Logger)
+│   ├── error.rs        # Serialization-ready error handling
+│   ├── lib.rs          # Tauri commands and state management
+└── Cargo.toml          # Rust dependencies
 ```
 
 ## Getting Started
 
-### Prerequisites
-
-- [Rust](https://www.rust-lang.org/tools/install)
-- [Node.js](https://nodejs.org/) and `npm`
-- [Tauri Prerequisites](https://tauri.app/v1/guides/getting-started/prerequisites)
-
-### Installation
-
-1. Clone the repository.
-2. Install frontend dependencies:
-   ```bash
-   npm install
-   ```
-3. Run the application in development mode:
-   ```bash
-   npm run tauri dev
-   ```
-
-## Configuration
-
-The engine supports dynamic configuration of audio modules via the Tauri IPC. The `Expander` module can be tuned for threshold and ratio to filter out background noise or focus on specific biometric audio signatures.
+1. Install [Rust](https://www.rust-lang.org/tools/install) and [Node.js](https://nodejs.org/).
+2. Install frontend dependencies: `npm install`
+3. Run in development: `npm run tauri dev`
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License - see [LICENSE](LICENSE) for details.

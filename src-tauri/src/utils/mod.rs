@@ -2,3 +2,4 @@
 
 pub mod logger;
 pub mod resampling;
+pub mod smoothing;

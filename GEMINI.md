@@ -3,24 +3,31 @@
 This project is a high-performance biometric audio gate built with Rust, Tauri v2, and CPAL.
 
 ## Core Architecture
-- **Real-Time Safety**: The audio thread (inside `src-tauri/src/core/audio.rs`) **must never block**. Do not use standard `Mutex` or `RwLock` for data transfer; use the implemented `ringbuf` (lock-free) or atomic operations.
-- **Modular DSP**: All processing logic must implement the `AudioModule` trait in `traits.rs`.
-- **Async/Sync Boundary**: Tauri commands are `async` and run on the tokio runtime. The `AudioEngine` state is wrapped in a `Mutex` in `AppState` for safe access from these commands.
+- **Real-Time Safety (Lock-Free)**: The audio thread (inside `src-tauri/src/core/audio.rs`) is strictly **lock-free**. 
+    - Configuration updates are sent from the UI via `crossbeam-channel`. 
+    - The audio thread maintains its own private state and never waits for a Mutex held by the UI thread.
+- **Engine-Level Resampling**: The engine optimizes the processing chain by choosing a unified "Internal Sample Rate."
+    - Modules report requirements via the `AudioModule::requirements()` trait method.
+    - If RNNoise is enabled, the engine resamples the entire input to 48kHz once, processes all modules, and resamples back to the system rate once.
+- **Modular DSP**: All processing logic implements the `AudioModule` trait in `traits.rs`.
+- **Async/Sync Boundary**: Tauri commands are `async` and run on the tokio runtime. The `AudioEngine` is managed as global state in `AppState`.
 - **Lifecycle & Cleanup**: The `AudioEngine` implements the `Drop` trait to ensure audio streams are released when the engine is destroyed. Additionally, the application explicitly stops the engine during the `RunEvent::Exit` event in `lib.rs` to guarantee a graceful shutdown and consistent logging.
 
 ## Engineering Standards
-- **Error Handling**: Use the custom `EngineError` enum in `error.rs` for all backend failures. This ensures proper serialization for the Tauri frontend.
-- **Sample Rate Independence**: All DSP modules must implement the `prepare` method from the `AudioModule` trait. This method is used to notify modules of the pipeline's sample rate, allowing them to pre-calculate coefficients and initialize internal resamplers if their internal processing requires a different rate (e.g., AI models).
+- **Parameter Smoothing**: All audible parameter changes (threshold, ratio, bypass) must use the `ParameterSmoother` utility to prevent digital clicks and pops.
+- **Sample Rate Independence**: Modules are notified of the internal sample rate via `prepare()`. They should favor the engine-level resampling but must remain functional at any rate.
+- **Error Handling**: Use the custom `EngineError` enum in `error.rs` for all backend failures.
 - **Metrics**: 
-    - **CPU Usage**: Tracks the application process usage using `sysinfo`, throttled to 200ms refreshes with EMA smoothing (alpha=0.1) for soft UI transitions.
-    - **Latency**: Reports full pipeline latency including measured hardware I/O (via `cpal` timestamps), processing time, a dynamic 10ms chunking delay, and ring buffer occupancy. Values are EMA-smoothed and reported as whole milliseconds.
+    - **CPU Usage**: Process-specific usage tracked via `sysinfo`.
+    - **Latency**: Comprehensive pipeline latency including hardware I/O, engine buffering (10ms chunks), and module-specific lookahead (e.g., 480 samples for RNNoise).
 
 ## Security & Validation
-- **CSP**: The `tauri.conf.json` contains a strict Content Security Policy. Any new external resources must be explicitly whitelisted there.
-- **Parameter Sanitization**: All configuration updates from the frontend must be clamped/validated in the `update_config` implementation of the respective module.
+- **CSP**: Strict Content Security Policy in `tauri.conf.json`.
+- **Parameter Sanitization**: All configuration updates must be clamped/validated in the `update_config` implementation of the respective module.
 
 ## Critical Dependencies
 - `cpal`: Cross-platform audio I/O.
-- `rubato`: Used for high-quality resampling when hardware input and output sample rates differ.
-- `ringbuf`: Lock-free SPSC (Single Producer Single Consumer) buffers for audio samples.
-- `sysinfo`: Used for cross-platform process CPU usage monitoring.
+- `nnnoiseless`: Pure-rust RNNoise implementation for voice noise suppression.
+- `rubato`: High-quality resampling.
+- `crossbeam-channel`: Lock-free MPMC channels for real-time safe communication.
+- `ringbuf`: Lock-free SPSC buffers for audio sample transfer.

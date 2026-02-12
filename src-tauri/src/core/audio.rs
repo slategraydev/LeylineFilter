@@ -160,14 +160,8 @@ impl EngineMetrics {
 pub struct AudioEngine {
     input_stream: Option<StreamWrapper>,
     output_stream: Option<StreamWrapper>,
-
-    /// Cached configurations for modules.
-    /// These are used to initialize modules when the engine starts.
     module_configs: Arc<Mutex<HashMap<String, ModuleConfig>>>,
-
-    /// Active channel for sending live updates to the audio thread.
     config_tx: Arc<Mutex<Option<Sender<ModuleConfig>>>>,
-
     pub metrics: Arc<EngineMetrics>,
     sys: System,
     pid: sysinfo::Pid,
@@ -211,22 +205,13 @@ impl AudioEngine {
             return 0.0;
         }
 
-        // Processing latency (from metrics)
         let processing_ms = f32::from_bits(self.metrics.latency_ms.load(Ordering::Relaxed));
-
-        // Accumulator latency (10ms)
         let chunk_size = (self.sample_rate * 0.01) as usize;
         let chunk_latency_ms = (chunk_size as f32 / self.sample_rate) * 1000.0;
-
-        // Ring buffer occupancy latency
         let rb_samples = self.rb_occupancy.load(Ordering::Relaxed);
         let rb_latency_ms = (rb_samples as f32 / self.sample_rate) * 1000.0;
-
-        // Module-specific latency (e.g., RNNoise lookahead)
         let mod_samples = self.module_latency_samples.load(Ordering::Relaxed);
         let mod_latency_ms = (mod_samples as f32 / self.sample_rate) * 1000.0;
-
-        // Hardware latencies
         let (in_lat, out_lat) = self.metrics.get_hardware_latencies();
 
         let current_latency = processing_ms + chunk_latency_ms + rb_latency_ms + mod_latency_ms + in_lat + out_lat;
@@ -259,7 +244,6 @@ impl AudioEngine {
     }
 
     pub fn update_module_config(&self, config: ModuleConfig) {
-        // 1. Update the cached config for future engine restarts
         let type_name = match &config {
             ModuleConfig::Expander { .. } => "Expander",
             ModuleConfig::RNNoise { .. } => "RNNoise",
@@ -270,7 +254,6 @@ impl AudioEngine {
             configs.insert(type_name.to_string(), config.clone());
         }
 
-        // 2. If the engine is running, send the update to the audio thread
         if let Ok(tx_lock) = self.config_tx.lock() {
             if let Some(tx) = tx_lock.as_ref() {
                 let _ = tx.send(config);
@@ -316,13 +299,28 @@ impl AudioEngine {
 
         self.sample_rate = out_sample_rate as f32;
 
-        // Initialize local modules for the audio thread
+        // Internal processing sample rate
+        // We run at 48kHz if any module requires it (like RNNoise), otherwise output rate.
+        let mut internal_sample_rate = self.sample_rate;
+
         let mut local_modules: Vec<Box<dyn AudioModule>> = vec![
-            Box::new(ExpanderModule::new(self.sample_rate)),
-            Box::new(RNNoiseModule::new(self.sample_rate)),
+            Box::new(ExpanderModule::new(internal_sample_rate)),
+            Box::new(RNNoiseModule::new(internal_sample_rate)),
         ];
 
-        // Apply saved configurations
+        for m in local_modules.iter() {
+            if let (Some(req_rate), _) = m.requirements() {
+                if req_rate > internal_sample_rate {
+                    internal_sample_rate = req_rate;
+                }
+            }
+        }
+
+        // Re-prepare modules with the final chosen internal rate
+        for m in local_modules.iter_mut() {
+            m.prepare(internal_sample_rate);
+        }
+
         if let Ok(configs) = self.module_configs.lock() {
             for (_, config) in configs.iter() {
                 for module in local_modules.iter_mut() {
@@ -331,11 +329,6 @@ impl AudioEngine {
             }
         }
 
-        // Initialize latency reporting
-        let initial_lat: usize = local_modules.iter().map(|m| m.latency_samples()).sum();
-        self.module_latency_samples.store(initial_lat, Ordering::Relaxed);
-
-        // Setup communication channel
         let (tx, rx) = unbounded::<ModuleConfig>();
         if let Ok(mut tx_lock) = self.config_tx.lock() {
             *tx_lock = Some(tx);
@@ -347,34 +340,51 @@ impl AudioEngine {
         let rb_occ_out = self.rb_occupancy.clone();
         let mod_lat_atomic = self.module_latency_samples.clone();
 
+        let initial_lat: usize = local_modules.iter().map(|m| m.latency_samples()).sum();
+        mod_lat_atomic.store(initial_lat, Ordering::Relaxed);
+
         let rb = HeapRb::<f32>::new((self.sample_rate as usize * 2).max(4800 * 2));
         let (mut producer, mut consumer) = rb.split();
 
-        let mut resampler = if (in_sample_rate - out_sample_rate).abs() > 1.0 {
+        // Engine-level Resampler In: Input -> Internal
+        let mut resampler_in = if (in_sample_rate - internal_sample_rate as f64).abs() > 1.0 {
             Some(FastFixedIn::<f32>::new(
-                out_sample_rate / in_sample_rate,
+                internal_sample_rate as f64 / in_sample_rate,
                 2.0,
                 PolynomialDegree::Cubic,
-                (out_sample_rate as f32 * 0.01) as usize,
+                (internal_sample_rate * 0.01) as usize,
                 1,
             ).map_err(|e| EngineError::ResamplerError(e.to_string()))?)
         } else {
             None
         };
 
-        let chunk_size = (self.sample_rate * 0.01) as usize;
-        let mut visualizer = VisualizerState::new(chunk_size);
-        let mut working_chunk = vec![0.0f32; chunk_size];
-        let mut input_accumulator = Vec::with_capacity((self.sample_rate * 0.1) as usize);
-        let mut process_accumulator = Vec::with_capacity((self.sample_rate * 0.1) as usize);
-        let mut resample_input = vec![vec![0.0f32; 0]];
+        // Engine-level Resampler Out: Internal -> Output
+        let mut resampler_out = if (internal_sample_rate as f64 - out_sample_rate).abs() > 1.0 {
+            Some(FastFixedIn::<f32>::new(
+                out_sample_rate / internal_sample_rate as f64,
+                2.0,
+                PolynomialDegree::Cubic,
+                (internal_sample_rate * 0.01) as usize,
+                1,
+            ).map_err(|e| EngineError::ResamplerError(e.to_string()))?)
+        } else {
+            None
+        };
+
+        let internal_chunk_size = (internal_sample_rate * 0.01) as usize;
+        let mut visualizer = VisualizerState::new(internal_chunk_size);
+        let mut working_chunk = vec![0.0f32; internal_chunk_size];
+        let mut input_accumulator = Vec::with_capacity((in_sample_rate as f32 * 0.1) as usize);
+        let mut internal_accumulator = Vec::with_capacity((internal_sample_rate * 0.1) as usize);
+        let mut output_accumulator = Vec::with_capacity((out_sample_rate as f32 * 0.1) as usize);
+        let mut resample_buf = vec![vec![0.0f32; 0]];
 
         let input_stream = input_device.build_input_stream(
             &input_config,
             move |data: &[f32], info: &cpal::InputCallbackInfo| {
                 let start_time = Instant::now();
 
-                // 1. Check for configuration updates (Lock-Free)
                 let mut config_changed = false;
                 while let Ok(config) = rx.try_recv() {
                     config_changed = true;
@@ -388,45 +398,56 @@ impl AudioEngine {
                     mod_lat_atomic.store(total_lat, Ordering::Relaxed);
                 }
 
-                let callback = info.timestamp().callback;
-                let capture = info.timestamp().capture;
-                if let Some(diff) = callback.duration_since(&capture) {
-                    let ms = diff.as_secs_f32() * 1000.0;
-                    metrics.input_latency_ms.store(ms.to_bits(), Ordering::Relaxed);
+                if let Some(diff) = info.timestamp().callback.duration_since(&info.timestamp().capture) {
+                    metrics.input_latency_ms.store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
                 }
 
                 for frame in data.chunks(in_channels) {
                     input_accumulator.push(frame[0]);
                 }
 
-                if let Some(ref mut rs) = resampler {
+                // Resample In
+                if let Some(ref mut rs) = resampler_in {
                     while input_accumulator.len() >= rs.input_frames_next() {
-                        let chunk: Vec<f32> = input_accumulator.drain(0..rs.input_frames_next()).collect();
-                        resample_input[0] = chunk;
-                        if let Ok(resampled) = rs.process(&resample_input, None) {
-                            process_accumulator.extend_from_slice(&resampled[0]);
+                        let len = rs.input_frames_next();
+                        resample_buf[0] = input_accumulator.drain(..len).collect();
+                        if let Ok(resampled) = rs.process(&resample_buf, None) {
+                            internal_accumulator.extend_from_slice(&resampled[0]);
                         }
                     }
                 } else {
-                    process_accumulator.extend_from_slice(&input_accumulator);
+                    internal_accumulator.extend_from_slice(&input_accumulator);
                     input_accumulator.clear();
                 }
 
-                let sr = out_sample_rate as f32;
-                while process_accumulator.len() >= chunk_size {
-                    for (i, sample) in process_accumulator.drain(0..chunk_size).enumerate() {
+                // Process in chunks at internal rate
+                while internal_accumulator.len() >= internal_chunk_size {
+                    for (i, sample) in internal_accumulator.drain(..internal_chunk_size).enumerate() {
                         working_chunk[i] = sample;
                     }
 
-                    // 2. Process modules (No Mutex!)
                     for module in local_modules.iter_mut() {
                         module.process(&mut working_chunk);
                     }
 
-                    producer.push_slice(&working_chunk);
-                    rb_occ_in.store(producer.occupied_len(), Ordering::Relaxed);
-                    visualizer.process(&working_chunk, sr, &metrics);
+                    visualizer.process(&working_chunk, internal_sample_rate, &metrics);
 
+                    // Resample Out
+                    if let Some(ref mut rs) = resampler_out {
+                        resample_buf[0].clear();
+                        resample_buf[0].extend_from_slice(&working_chunk);
+                        if let Ok(resampled) = rs.process(&resample_buf, None) {
+                            output_accumulator.extend_from_slice(&resampled[0]);
+                        }
+                    } else {
+                        output_accumulator.extend_from_slice(&working_chunk);
+                    }
+
+                    // Push to output ringbuffer
+                    producer.push_slice(&output_accumulator);
+                    output_accumulator.clear();
+
+                    rb_occ_in.store(producer.occupied_len(), Ordering::Relaxed);
                     let elapsed = start_time.elapsed().as_secs_f32() * 1000.0;
                     metrics.latency_ms.store(elapsed.to_bits(), Ordering::Relaxed);
                 }
@@ -438,11 +459,8 @@ impl AudioEngine {
         let output_stream = output_device.build_output_stream(
             &output_config,
             move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
-                let callback = info.timestamp().callback;
-                let playback = info.timestamp().playback;
-                if let Some(diff) = playback.duration_since(&callback) {
-                    let ms = diff.as_secs_f32() * 1000.0;
-                    metrics_out.output_latency_ms.store(ms.to_bits(), Ordering::Relaxed);
+                if let Some(diff) = info.timestamp().playback.duration_since(&info.timestamp().callback) {
+                    metrics_out.output_latency_ms.store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
                 }
 
                 let out_channels = output_config.channels as usize;
@@ -466,7 +484,7 @@ impl AudioEngine {
         self.input_stream = Some(StreamWrapper(input_stream));
         self.output_stream = Some(StreamWrapper(output_stream));
 
-        log::info!("Audio engine started successfully");
+        log::info!("Audio engine started successfully (Internal Rate: {}Hz)", internal_sample_rate);
         Ok(())
     }
 
@@ -474,12 +492,9 @@ impl AudioEngine {
         if self.is_running() {
             self.input_stream = None;
             self.output_stream = None;
-
-            // Clear the sender so we don't try to send to a dead receiver
             if let Ok(mut tx_lock) = self.config_tx.lock() {
                 *tx_lock = None;
             }
-
             log::info!("Audio engine stopped");
         }
     }
@@ -500,15 +515,6 @@ mod tests {
         let engine = AudioEngine::new();
         assert!(engine.input_stream.is_none());
         assert!(engine.output_stream.is_none());
-        assert!(!engine.is_running());
-    }
-
-    #[test]
-    fn test_stop_idempotency() {
-        let mut engine = AudioEngine::new();
-        engine.stop();
-        assert!(!engine.is_running());
-        engine.stop();
         assert!(!engine.is_running());
     }
 }

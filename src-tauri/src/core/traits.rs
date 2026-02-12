@@ -32,6 +32,10 @@ pub trait AudioModule: Send + Sync {
     /// Returns the latency introduced by this module in samples.
     fn latency_samples(&self) -> usize { 0 }
 
+    /// Returns the required sample rate and block size for this module, if any.
+    /// (Sample Rate, Block Size)
+    fn requirements(&self) -> (Option<f32>, Option<usize>) { (None, None) }
+
     /// Prepares the module for processing with a specific sample rate.
     ///
     /// This is called before any processing starts or when the sample rate changes.
