@@ -16,6 +16,7 @@ describe('ExpanderModule', () => {
     initialPosition: { gx: 1, gy: 1 },
     heightUnits: 32,
     onPositionChange: () => { },
+    onHeightReport: () => { },
   };
 
   it('renders correctly with default config', () => {

@@ -7,6 +7,7 @@ interface RNNoiseModuleProps {
   initialPosition: GridPosition;
   heightUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
+  onHeightReport?: (id: string, units: number) => void;
   title?: string;
   config: RNNoiseConfig;
   onChange: (config: RNNoiseConfig) => void;
@@ -19,6 +20,7 @@ export function RNNoiseModule({
   initialPosition,
   heightUnits,
   onPositionChange,
+  onHeightReport,
   title = "Noise Suppression",
   config,
   onChange,
@@ -35,6 +37,7 @@ export function RNNoiseModule({
       initialPosition={initialPosition}
       heightUnits={heightUnits}
       onPositionChange={onPositionChange}
+      onHeightReport={onHeightReport}
       title={title}
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}
@@ -42,7 +45,7 @@ export function RNNoiseModule({
       style={style}
     >
       <div className="control-group">
-        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 1rem 0' }}>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
           Uses Recurrent Neural Networks to suppress non-stationary noise in real-time.
         </p>
       </div>

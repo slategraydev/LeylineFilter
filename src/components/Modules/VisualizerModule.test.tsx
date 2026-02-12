@@ -10,6 +10,7 @@ describe('VisualizerModule', () => {
     initialPosition: { gx: 1, gy: 1 },
     heightUnits: 16,
     onPositionChange: () => { },
+    onHeightReport: () => { },
     enabled: true,
     onToggle: vi.fn(),
     isRunning: true,

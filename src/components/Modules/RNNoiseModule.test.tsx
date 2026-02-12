@@ -12,6 +12,7 @@ describe('RNNoiseModule', () => {
     initialPosition: { gx: 1, gy: 1 },
     heightUnits: 11,
     onPositionChange: () => { },
+    onHeightReport: () => { },
   };
 
   it('renders correctly with default config', () => {

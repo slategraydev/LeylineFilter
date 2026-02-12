@@ -9,6 +9,7 @@ interface VisualizerModuleProps {
   initialPosition: GridPosition;
   heightUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
+  onHeightReport?: (id: string, units: number) => void;
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
   onRemove?: () => void;
@@ -27,6 +28,7 @@ export function VisualizerModule({
   initialPosition,
   heightUnits,
   onPositionChange,
+  onHeightReport,
   enabled,
   onToggle,
   onRemove,
@@ -41,6 +43,7 @@ export function VisualizerModule({
       initialPosition={initialPosition}
       heightUnits={heightUnits}
       onPositionChange={onPositionChange}
+      onHeightReport={onHeightReport}
       title="Spectrum Analyzer"
       enabled={enabled}
       onToggle={onToggle}
@@ -48,7 +51,7 @@ export function VisualizerModule({
       hideToggle={false} // Allow disabling it if desired
       style={style}
     >
-      <div style={{ height: '180px', marginTop: '4px' }}>
+      <div style={{ flex: 1, minHeight: '120px', marginTop: '4px' }}>
         <Visualizer
           isRunning={isRunning && enabled}
           spectrum={spectrum}

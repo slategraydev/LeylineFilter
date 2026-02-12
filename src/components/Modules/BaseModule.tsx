@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { useDraggable, GridPosition } from '../../hooks/useDraggable';
 import { GRID_UNIT_PX } from '../../constants';
 import './BaseModule.css';
@@ -10,6 +10,7 @@ interface BaseModuleProps {
   initialPosition: GridPosition;
   heightUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
+  onHeightReport?: (id: string, units: number) => void;
   title: string;
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
@@ -28,6 +29,7 @@ export function BaseModule({
   initialPosition,
   heightUnits,
   onPositionChange,
+  onHeightReport,
   title,
   enabled,
   onToggle,
@@ -41,6 +43,58 @@ export function BaseModule({
     (newPos) => onPositionChange(id, newPos)
   );
 
+  const moduleRef = useRef<HTMLDivElement>(null);
+
+  // Dynamically measure and report height to the nearest grid unit
+  useLayoutEffect(() => {
+    if (!moduleRef.current || !onHeightReport) return;
+
+    const measure = () => {
+      const content = moduleRef.current?.querySelector('.module-content') as HTMLElement;
+
+      if (content) {
+        const children = Array.from(content.children) as HTMLElement[];
+        let naturalContentHeight = 0;
+
+        if (children.length > 0) {
+          // The natural height of the content is the bottom edge of the last child
+          // plus the bottom padding (1 grid unit).
+          const lastChild = children[children.length - 1];
+          naturalContentHeight = lastChild.offsetTop + lastChild.offsetHeight + GRID_UNIT_PX;
+        } else {
+          // Empty content still has top and bottom padding
+          naturalContentHeight = GRID_UNIT_PX * 2;
+        }
+
+        // Total height = Header (4 units) + naturalContentHeight
+        const headerHeight = GRID_UNIT_PX * 4;
+        const totalHeight = headerHeight + naturalContentHeight;
+
+        // Snap to the nearest grid unit
+        const units = Math.ceil(totalHeight / GRID_UNIT_PX);
+
+        if (units !== heightUnits) {
+          onHeightReport(id, units);
+        }
+      }
+    };
+
+    // Observe children because the content container itself is stretched by flex: 1
+    // and won't change size when its children grow/shrink unless they overflow.
+    const observer = new ResizeObserver(measure);
+    const content = moduleRef.current.querySelector('.module-content');
+    if (content) {
+      // Observe the content container for padding/size changes
+      observer.observe(content);
+      // Also observe every child to catch internal layout changes
+      Array.from(content.children).forEach(child => observer.observe(child));
+    }
+
+    // Initial measure
+    measure();
+
+    return () => observer.disconnect();
+  }, [id, heightUnits, onHeightReport, children]); // Re-run when children structure changes
   // Apply absolute positioning and z-index
   const combinedStyle: React.CSSProperties = {
     position: 'absolute',
@@ -53,6 +107,7 @@ export function BaseModule({
 
   return (
     <div
+      ref={moduleRef}
       className={`module-card ${enabled ? 'active' : 'inactive'}`}
       style={combinedStyle}
     >

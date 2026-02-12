@@ -7,6 +7,7 @@ interface ExpanderModuleProps {
   initialPosition: GridPosition;
   heightUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
+  onHeightReport?: (id: string, units: number) => void;
   config: ExpanderConfig;
   onChange: (config: ExpanderConfig) => void;
   onRemove?: () => void;
@@ -18,6 +19,7 @@ export function ExpanderModule({
   initialPosition,
   heightUnits,
   onPositionChange,
+  onHeightReport,
   config,
   onChange,
   onRemove,
@@ -33,6 +35,7 @@ export function ExpanderModule({
       initialPosition={initialPosition}
       heightUnits={heightUnits}
       onPositionChange={onPositionChange}
+      onHeightReport={onHeightReport}
       title="Noise Expander"
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}

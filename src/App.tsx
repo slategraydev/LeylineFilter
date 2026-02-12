@@ -60,6 +60,18 @@ function App() {
     return {};
   });
 
+  const [moduleHeights, setModuleHeights] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem("module_heights_grid");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse module heights", e);
+      }
+    }
+    return {};
+  });
+
   // Helper to find the next empty slot in the grid (using 1x1 units)
   const findNextAvailableSlot = (currentPositions: Record<string, GridPosition>, type: string): GridPosition => {
     // 20px buffer for scrollbars and right-side breathing room
@@ -90,7 +102,7 @@ function App() {
     existingIds.forEach(id => {
       const pos = currentPositions[id];
       const mType = moduleTypeMap[id] || "default";
-      const mHeight = MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
+      const mHeight = moduleHeights[id] || MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
 
       potentialYs.push(pos.gy + mHeight + GAP_UNITS);
       potentialXs.push(pos.gx + MODULE_W_UNITS + GAP_UNITS);
@@ -108,7 +120,7 @@ function App() {
         const isAreaBlocked = existingIds.some(id => {
           const pos = currentPositions[id];
           const mType = moduleTypeMap[id] || "default";
-          const mHeight = MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
+          const mHeight = moduleHeights[id] || MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
 
           const hOverlap = gx < pos.gx + MODULE_W_UNITS + GAP_UNITS && gx + MODULE_W_UNITS + GAP_UNITS > pos.gx;
           const vOverlap = gy < pos.gy + mHeight + GAP_UNITS && gy + h + GAP_UNITS > pos.gy;
@@ -160,82 +172,78 @@ function App() {
 
   const handlePositionChange = (id: string, pos: GridPosition) => {
     setPositions((prev) => {
-      // Helper to check if a specific position is blocked for a given module
-      const isBlocked = (targetPos: GridPosition, targetId: string, currentPos: Record<string, GridPosition>) => {
-        const moduleTypeMap: Record<string, string> = {};
-        engineState?.modules?.forEach(m => {
-          moduleTypeMap[m.id] = m.config.type;
-        });
-
-        const myType = moduleTypeMap[targetId] || "default";
-        const myHeight = MODULE_HEIGHTS[myType] || MODULE_H_UNITS;
-
-        return Object.entries(currentPos).some(([oid, otherPos]) => {
-          if (oid === targetId) return false;
-          const otherType = moduleTypeMap[oid] || "default";
-          const otherHeight = MODULE_HEIGHTS[otherType] || MODULE_H_UNITS;
-
-          const hOverlap = targetPos.gx < otherPos.gx + MODULE_W_UNITS + GAP_UNITS && targetPos.gx + MODULE_W_UNITS + GAP_UNITS > otherPos.gx;
-          const vOverlap = targetPos.gy < otherPos.gy + otherHeight + GAP_UNITS && targetPos.gy + myHeight + GAP_UNITS > otherPos.gy;
-          return hOverlap && vOverlap;
-        });
-      };
-
-      if (!isBlocked(pos, id, prev)) {
-        const next = { ...prev, [id]: pos };
-        localStorage.setItem("module_positions_grid", JSON.stringify(next));
-        return next;
-      }
-
-      // If blocked, find the nearest available anchor point to the dropped position
-      const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
-      const availableUnits = Math.floor(availableWidthPx / GRID_UNIT_PX);
-      const maxGx = Math.max(MODULE_W_UNITS, availableUnits);
-
-      const moduleTypeMap: Record<string, string> = {};
+      const typeMap: Record<string, string> = {};
       engineState?.modules?.forEach(m => {
-        moduleTypeMap[m.id] = m.config.type;
+        typeMap[m.id] = m.config.type;
       });
 
-      const potentialYs = [1, pos.gy];
-      const potentialXs = [1, pos.gx];
+      const getH = (mid: string) => moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || "default"] || MODULE_H_UNITS;
 
-      Object.entries(prev).forEach(([oid, otherPos]) => {
-        if (oid === id) return;
-        const otherType = moduleTypeMap[oid] || "default";
-        const otherHeight = MODULE_HEIGHTS[otherType] || MODULE_H_UNITS;
-        potentialYs.push(otherPos.gy + otherHeight + GAP_UNITS);
-        potentialXs.push(otherPos.gx + MODULE_W_UNITS + GAP_UNITS);
-      });
+      const next = { ...prev };
+      const myHeight = getH(id);
 
-      const uniqueYs = Array.from(new Set(potentialYs));
-      const uniqueXs = Array.from(new Set(potentialXs));
+      // 1. Determine Displacement Type (Horizontal vs Vertical)
+      // If dropped near the left edge, we push everything right.
+      // Otherwise, we find the "pivot" module we are dropping on or near and push down.
+      if (pos.gx <= 5) {
+        const shiftX = MODULE_W_UNITS + GAP_UNITS;
+        Object.keys(next).forEach(mid => {
+          if (mid === id) return;
+          if (next[mid].gx >= pos.gx) {
+            next[mid] = { ...next[mid], gx: next[mid].gx + shiftX };
+          }
+        });
+        next[id] = pos;
+      } else {
+        // Vertical Displacement Logic
+        // Find if we are dropping "on" or "between" modules in this column
+        const colModules = Object.keys(next)
+          .filter(mid => mid !== id && next[mid].gx === pos.gx)
+          .sort((a, b) => next[a].gy - next[b].gy);
 
-      let bestPos = prev[id]; // Fallback to old position
-      let minDistance = Infinity;
+        // Find the insertion point: the first module that is at or below our drop point
+        const pivotIndex = colModules.findIndex(mid => {
+          const mPos = next[mid];
+          const mHeight = getH(mid);
+          // We are "on" this module if our top is above its bottom
+          return pos.gy < mPos.gy + mHeight + GAP_UNITS;
+        });
 
-      for (const gy of uniqueYs) {
-        for (const gx of uniqueXs) {
-          if (gx + MODULE_W_UNITS - 1 > maxGx) continue;
-          if (gx < 1 || gy < 1) continue;
-
-          if (!isBlocked({ gx, gy }, id, prev)) {
-            const dist = Math.sqrt(Math.pow(gx - pos.gx, 2) + Math.pow(gy - pos.gy, 2));
-            if (dist < minDistance) {
-              minDistance = dist;
-              bestPos = { gx, gy };
-            }
+        if (pivotIndex !== -1) {
+          // We found a pivot. Push it and everything below it down.
+          const shiftY = myHeight + GAP_UNITS;
+          for (let i = pivotIndex; i < colModules.length; i++) {
+            const mid = colModules[i];
+            next[mid] = { ...next[mid], gy: next[mid].gy + shiftY };
           }
         }
+
+        // Place the dragged module exactly where it was dropped
+        next[id] = pos;
       }
 
-      const next = { ...prev, [id]: bestPos };
+      // 2. Compaction Pass (Per Column)
+      // This ensures that while we push things down to make room,
+      // they always snap back into a tight chain.
+      const columns = Array.from(new Set(Object.values(next).map(p => p.gx)));
+      columns.forEach(gx => {
+        const colModules = Object.keys(next)
+          .filter(mid => next[mid].gx === gx)
+          .sort((a, b) => next[a].gy - next[b].gy);
+
+        let currentY = 1;
+        colModules.forEach(mid => {
+          const p = next[mid];
+          // Pull up to currentY to ensure no gaps
+          next[mid] = { ...p, gy: currentY };
+          currentY = next[mid].gy + getH(mid) + GAP_UNITS;
+        });
+      });
+
       localStorage.setItem("module_positions_grid", JSON.stringify(next));
       return next;
     });
-  };
-
-  const toggleEngine = () => {
+  }; const toggleEngine = () => {
     if (isRunning) {
       stopEngine();
     } else {
@@ -245,6 +253,15 @@ function App() {
 
   const handleUpdateConfig = (_id: string, config: ModuleConfig) => {
     invoke("update_config", { config });
+  };
+
+  const handleHeightReport = (id: string, units: number) => {
+    setModuleHeights(prev => {
+      if (prev[id] === units) return prev;
+      const next = { ...prev, [id]: units };
+      localStorage.setItem("module_heights_grid", JSON.stringify(next));
+      return next;
+    });
   };
 
   // Calculate container dimensions based on module positions
@@ -260,7 +277,7 @@ function App() {
 
     Object.entries(positions).forEach(([id, pos]) => {
       const mType = typeMap[id] || "default";
-      const mHeight = MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
+      const mHeight = moduleHeights[id] || MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
 
       maxGx = Math.max(maxGx, pos.gx + MODULE_W_UNITS);
       maxGy = Math.max(maxGy, pos.gy + mHeight);
@@ -281,13 +298,14 @@ function App() {
     if (!pos) return null;
 
     const config = module.config;
-    const mHeight = MODULE_HEIGHTS[config.type] || MODULE_H_UNITS;
+    const mHeight = moduleHeights[module.id] || MODULE_HEIGHTS[config.type] || MODULE_H_UNITS;
 
     const commonProps = {
       id: module.id,
       initialPosition: pos,
       heightUnits: mHeight,
       onPositionChange: handlePositionChange,
+      onHeightReport: handleHeightReport,
       onRemove: () => removeModule(module.id),
     };
 
@@ -413,8 +431,20 @@ function App() {
         </div>
       </aside>
 
-      <main className="module-grid" style={getGridContentStyle()}>
-        {engineState?.modules?.map(renderModule)}
+      <main className="module-grid">
+        <div className="grid-inner" style={getGridContentStyle()}>
+          {engineState?.modules?.map(renderModule)}
+
+          {showAddMenu && (
+            <AddModuleMenu
+              onAdd={(type) => {
+                addModule(type);
+                setShowAddMenu(false);
+              }}
+              onClose={() => setShowAddMenu(false)}
+              existingTypes={(engineState?.modules || []).map(m => m.config.type)}
+            />
+          )}        </div>
 
         <div className="module-card placeholder">
           <button
@@ -428,16 +458,6 @@ function App() {
             </svg>
           </button>
         </div>
-
-        {showAddMenu && (
-          <AddModuleMenu
-            onAdd={(type) => {
-              addModule(type);
-              setShowAddMenu(false);
-            }}
-            onClose={() => setShowAddMenu(false)}
-          />
-        )}
       </main>
     </div>
   );

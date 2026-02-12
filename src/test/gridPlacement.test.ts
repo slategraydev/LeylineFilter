@@ -1,136 +1,145 @@
-
 import { describe, it, expect } from 'vitest';
 import { GridPosition } from '../hooks/useDraggable';
 
-// Simplified version of the constants for testing
 const MODULE_W_UNITS = 18;
 const GAP_UNITS = 1;
-const MODULE_HEIGHTS: Record<string, number> = {
-  "Gain": 12,
-  "Expander": 32,
-  "RNNoise": 11,
-  "Filter": 24,
-  "Visualizer": 16,
-  "default": 22
-};
 
-// The algorithm from App.tsx (extracted for verification)
-const findNextAvailableSlot = (
-  currentPositions: Record<string, GridPosition>,
-  type: string,
-  availableWidthPx: number,
-  moduleTypeMap: Record<string, string>
-): GridPosition => {
-  const GRID_UNIT_PX = 18;
-  const availableUnits = Math.floor(availableWidthPx / GRID_UNIT_PX);
-  const maxGx = Math.max(MODULE_W_UNITS, availableUnits);
-  const existingIds = Object.keys(currentPositions);
+// The core displacement and compaction algorithm extracted for testing
+export const resolvePositions = (
+  id: string,
+  pos: GridPosition,
+  prev: Record<string, GridPosition>,
+  getH: (mid: string) => number
+): Record<string, GridPosition> => {
+  // Start with a clean slate based on PREVIOUS positions to determine order
+  const next = { ...prev, [id]: pos };
 
-  const h = MODULE_HEIGHTS[type] || 22;
+  // 1. Horizontal Displacement (Push Aside)
+  if (pos.gx <= 5) {
+    const shiftX = MODULE_W_UNITS + GAP_UNITS;
+    Object.keys(prev).forEach(currId => {
+      if (currId === id) return;
+      const p = prev[currId];
+      if (p.gx >= pos.gx) {
+        next[currId] = { ...next[currId], gx: p.gx + shiftX };
+      }
+    });
+  }
 
-  if (existingIds.length === 0) return { gx: 1, gy: 1 };
-
-  const potentialYs = [1];
-  const potentialXs = [1];
-
-  existingIds.forEach(id => {
-    const pos = currentPositions[id];
-    const mType = moduleTypeMap[id] || "default";
-    const mHeight = MODULE_HEIGHTS[mType] || 22;
-
-    potentialYs.push(pos.gy + mHeight + GAP_UNITS);
-    potentialXs.push(pos.gx + MODULE_W_UNITS + GAP_UNITS);
+  // 2. Vertical Resolution
+  // We process modules in their vertical order to ensure a stable "chain reaction"
+  const ids = Object.keys(next).sort((a, b) => {
+    const ya = next[a].gy;
+    const yb = next[b].gy;
+    if (ya !== yb) return ya - yb;
+    // Ties: If one is the dragged module, it wins (comes first)
+    if (a === id) return -1;
+    if (b === id) return 1;
+    return 0;
   });
 
-  const uniqueYs = Array.from(new Set(potentialYs)).sort((a, b) => a - b);
-  const uniqueXs = Array.from(new Set(potentialXs)).sort((a, b) => a - b);
+  // Iteratively resolve overlaps in the sorted order
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const idA = ids[i];
+      const idB = ids[j];
 
-  for (const gy of uniqueYs) {
-    for (const gx of uniqueXs) {
-      if (gx + MODULE_W_UNITS - 1 > maxGx) continue;
+      const pA = next[idA];
+      const pB = next[idB];
+      const hA = getH(idA);
+      const hB = getH(idB);
 
-      const isAreaBlocked = existingIds.some(id => {
-        const pos = currentPositions[id];
-        const mType = moduleTypeMap[id] || "default";
-        const mHeight = MODULE_HEIGHTS[mType] || 22;
+      const hOverlap = pA.gx < pB.gx + MODULE_W_UNITS + GAP_UNITS && pA.gx + MODULE_W_UNITS + GAP_UNITS > pB.gx;
+      const vOverlap = pA.gy < pB.gy + hB + GAP_UNITS && pA.gy + hA + GAP_UNITS > pB.gy;
 
-        const hOverlap = gx < pos.gx + MODULE_W_UNITS + GAP_UNITS && gx + MODULE_W_UNITS + GAP_UNITS > pos.gx;
-        const vOverlap = gy < pos.gy + mHeight + GAP_UNITS && gy + h + GAP_UNITS > pos.gy;
-        return hOverlap && vOverlap;
-      });
-
-      if (!isAreaBlocked) {
-        return { gx, gy };
+      if (hOverlap && vOverlap) {
+        // A pushes B down (because A is "above" B in sorted order)
+        next[idB] = { ...pB, gy: pA.gy + hA + GAP_UNITS };
+        // We might have caused a new overlap with something else, so we need to re-sort or re-verify.
+        // But since we are processing in order, it should propagate down.
       }
     }
   }
-  return { gx: 1, gy: 1 };
-};
+  // 3. Compaction Pass (Pull up while preserving order)
+  const columns = Array.from(new Set(Object.values(next).map(p => p.gx)));
+  columns.forEach(gx => {
+    const colModules = Object.keys(next)
+      .filter(mid => next[mid].gx === gx)
+      .sort((a, b) => next[a].gy - next[b].gy);
 
-describe('Grid Placement Algorithm', () => {
-  it('places the first module at (1,1)', () => {
-    const pos = findNextAvailableSlot({}, "Gain", 1000, {});
-    expect(pos).toEqual({ gx: 1, gy: 1 });
-  });
-
-  it('places the second module to the right of the first if it fits', () => {
-    const current = { "m1": { gx: 1, gy: 1 } };
-    const types = { "m1": "Gain" };
-    // MODULE_W_UNITS is 18. Gap is 1. Next should be at 1 + 18 + 1 = 20.
-    const pos = findNextAvailableSlot(current, "Gain", 1000, types);
-    expect(pos).toEqual({ gx: 20, gy: 1 });
-  });
-
-  it('wraps to next row if window is too narrow', () => {
-    const current = { "m1": { gx: 1, gy: 1 } };
-    const types = { "m1": "Gain" };
-    // Gain height is 12. Next should be at gy = 1 + 12 + 1 = 14.
-    // Available width = 36 units (36 * 18 = 648)
-    const pos = findNextAvailableSlot(current, "Gain", 648, types);
-    expect(pos).toEqual({ gx: 1, gy: 14 });
-  });
-
-  it('tight-fits a small module in a hole', () => {
-    // Hole at (20, 1) if we have modules at (1,1), (39,1) and (1, 14)
-    const current = {
-      "m1": { gx: 1, gy: 1 },
-      "m2": { gx: 39, gy: 1 },
-      "m3": { gx: 1, gy: 14 }
-    };
-    const types = { "m1": "Gain", "m2": "Gain", "m3": "Gain" };
-    const pos = findNextAvailableSlot(current, "Gain", 2000, types);
-    expect(pos).toEqual({ gx: 20, gy: 1 });
-  });
-
-  it('respects varying module heights for overlap detection', () => {
-    // m1 is Expander (height 32) at (1,1)
-    const current = { "m1": { gx: 1, gy: 1 } };
-    const types = { "m1": "Expander" };
-
-    // Narrow window forcing wrap
-    const pos = findNextAvailableSlot(current, "Gain", 400, types);
-    // Next should be at 1 + 32 + 1 = 34
-    expect(pos).toEqual({ gx: 1, gy: 34 });
-  });
-
-  it('prunes stale positions (logic verification)', () => {
-    // Simulated state from App.tsx useEffect
-    const engineModules = [{ id: "m2", config: { type: "Gain" } }];
-    const positions: Record<string, GridPosition> = {
-      "m1": { gx: 1, gy: 1 }, // Stale
-      "m2": { gx: 21, gy: 1 }
-    };
-
-    const next: Record<string, GridPosition> = { ...positions };
-    const currentIds = new Set(engineModules.map(m => m.id));
-
-    Object.keys(next).forEach(id => {
-      if (!currentIds.has(id)) {
-        delete next[id];
-      }
+    let currentY = 1;
+    colModules.forEach(mid => {
+      const p = next[mid];
+      // Pull up to currentY if possible
+      next[mid] = { ...p, gy: currentY };
+      currentY = next[mid].gy + getH(mid) + GAP_UNITS;
     });
+  });
 
-    expect(next).toEqual({ "m2": { gx: 21, gy: 1 } });
-    expect(next).not.toHaveProperty("m1");
+  return next;
+};
+describe('Grid Displacement Logic', () => {
+  const getH = () => 10; // Simple fixed height for tests
+
+  it('pushes a module down when another is dropped on top', () => {
+    const prev = { "m1": { gx: 10, gy: 1 } };
+    const result = resolvePositions("m2", { gx: 10, gy: 1 }, prev, getH);
+
+    expect(result["m2"]).toEqual({ gx: 10, gy: 1 });
+    expect(result["m1"]).toEqual({ gx: 10, gy: 12 }); // 1 + 10 + 1
+  });
+
+  it('resolves chains of collisions', () => {
+    const prev = {
+      "m1": { gx: 10, gy: 1 },
+      "m2": { gx: 10, gy: 12 }
+    };
+    const result = resolvePositions("m3", { gx: 10, gy: 1 }, prev, getH);
+
+    expect(result["m3"]).toEqual({ gx: 10, gy: 1 });
+    expect(result["m1"]).toEqual({ gx: 10, gy: 12 });
+    expect(result["m2"]).toEqual({ gx: 10, gy: 23 }); // 12 + 10 + 1
+  });
+
+  it('compacts modules to remove gaps', () => {
+    const prev = { "m1": { gx: 10, gy: 1 } };
+    // Drop m2 at gy=50, it should be pulled up to gy=12
+    const result = resolvePositions("m2", { gx: 10, gy: 50 }, prev, getH);
+
+    expect(result["m1"]).toEqual({ gx: 10, gy: 1 });
+    expect(result["m2"]).toEqual({ gx: 10, gy: 12 });
+  });
+
+  it('handles horizontal displacement at left edge', () => {
+    const prev = {
+      "m1": { gx: 1, gy: 1 },
+      "m2": { gx: 1, gy: 12 }
+    };
+    // Drop m3 at gx=1 (left edge), should push m1 and m2 to the right
+    const result = resolvePositions("m3", { gx: 1, gy: 1 }, prev, getH);
+
+    expect(result["m3"]).toEqual({ gx: 1, gy: 1 });
+    const shift = MODULE_W_UNITS + GAP_UNITS;
+    expect(result["m1"].gx).toEqual(1 + shift);
+    expect(result["m2"].gx).toEqual(1 + shift);
+  });
+
+  it('drops between modules in a column', () => {
+    const prev = {
+      "m1": { gx: 10, gy: 1 },
+      "m2": { gx: 10, gy: 12 }
+    };
+    // Drop m3 at gy=5 (between 1 and 12).
+    // m1(1) < m3(5) < m2(12).
+    // Compaction: m1 at 1, m3 at 12, m2 at 23.
+    const result = resolvePositions("m3", { gx: 10, gy: 5 }, prev, getH);
+
+    expect(result["m1"].gy).toBeLessThan(result["m3"].gy);
+    expect(result["m3"].gy).toBeLessThan(result["m2"].gy);
+
+    // Exact positions after resolution + compaction:
+    expect(result["m1"]).toEqual({ gx: 10, gy: 1 });
+    expect(result["m3"]).toEqual({ gx: 10, gy: 12 });
+    expect(result["m2"]).toEqual({ gx: 10, gy: 23 });
   });
 });

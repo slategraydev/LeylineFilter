@@ -8,6 +8,7 @@ interface Props {
   initialPosition: GridPosition;
   heightUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
+  onHeightReport?: (id: string, units: number) => void;
   config: GainConfig;
   onChange: (config: GainConfig) => void;
   onRemove?: () => void;
@@ -19,6 +20,7 @@ export const GainModule: React.FC<Props> = ({
   initialPosition,
   heightUnits,
   onPositionChange,
+  onHeightReport,
   config,
   onChange,
   onRemove,
@@ -34,6 +36,7 @@ export const GainModule: React.FC<Props> = ({
       initialPosition={initialPosition}
       heightUnits={heightUnits}
       onPositionChange={onPositionChange}
+      onHeightReport={onHeightReport}
       title="Master Gain"
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}

@@ -78,3 +78,13 @@
     color: var(--color-accent);
     padding-left: 20px;
 }
+
+.no-modules-msg {
+    padding: 20px;
+    text-align: center;
+    color: var(--color-text-dim);
+    font-size: 0.75rem;
+    font-style: italic;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}

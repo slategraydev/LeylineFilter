@@ -15,6 +15,7 @@ describe('FilterModule', () => {
     initialPosition: { gx: 1, gy: 1 },
     heightUnits: 24,
     onPositionChange: () => { },
+    onHeightReport: () => { },
   };
 
   it('renders correctly with default config', () => {

@@ -7,6 +7,7 @@ interface FilterModuleProps {
   initialPosition: GridPosition;
   heightUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
+  onHeightReport?: (id: string, units: number) => void;
   config: FilterConfig;
   onChange: (config: FilterConfig) => void;
   onRemove?: () => void;
@@ -18,6 +19,7 @@ export function FilterModule({
   initialPosition,
   heightUnits,
   onPositionChange,
+  onHeightReport,
   config,
   onChange,
   onRemove,
@@ -33,6 +35,7 @@ export function FilterModule({
       initialPosition={initialPosition}
       heightUnits={heightUnits}
       onPositionChange={onPositionChange}
+      onHeightReport={onHeightReport}
       title="Audio Filter"
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}

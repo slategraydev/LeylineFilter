@@ -13,6 +13,7 @@ describe('GainModule', () => {
     initialPosition: { gx: 1, gy: 1 },
     heightUnits: 12,
     onPositionChange: () => { },
+    onHeightReport: () => { },
   };
 
   it('renders correctly with default config', () => {

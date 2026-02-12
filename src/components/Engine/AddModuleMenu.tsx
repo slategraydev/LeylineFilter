@@ -5,6 +5,7 @@ import './AddModuleMenu.css';
 interface AddModuleMenuProps {
   onAdd: (type: string) => void;
   onClose: () => void;
+  existingTypes: string[];
 }
 
 const MODULE_TYPES = [
@@ -15,7 +16,9 @@ const MODULE_TYPES = [
   { label: 'Visualizer', type: 'Visualizer' },
 ];
 
-export function AddModuleMenu({ onAdd, onClose }: AddModuleMenuProps) {
+export function AddModuleMenu({ onAdd, onClose, existingTypes }: AddModuleMenuProps) {
+  const filteredTypes = MODULE_TYPES.filter(item => !existingTypes.includes(item.type));
+
   return (
     <div className="add-module-menu">
       <div className="menu-header">
@@ -23,18 +26,22 @@ export function AddModuleMenu({ onAdd, onClose }: AddModuleMenuProps) {
         <button className="close-menu-btn" onClick={onClose}>&times;</button>
       </div>
       <div className="menu-items">
-        {MODULE_TYPES.map((item) => (
-          <button
-            key={item.type}
-            className="menu-item"
-            onClick={() => {
-              onAdd(item.type);
-              onClose();
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
+        {filteredTypes.length > 0 ? (
+          filteredTypes.map((item) => (
+            <button
+              key={item.type}
+              className="menu-item"
+              onClick={() => {
+                onAdd(item.type);
+                onClose();
+              }}
+            >
+              {item.label}
+            </button>
+          ))
+        ) : (
+          <div className="no-modules-msg">All modules active</div>
+        )}
       </div>
     </div>
   );
