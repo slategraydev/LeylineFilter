@@ -101,6 +101,7 @@ pub struct Metrics {
     latency_ms: f32,
     cpu_usage: f32,
     input_level: f32,
+    buffer_size: u32,
     spectrum: [f32; 12],
     tonality: [f32; 12],
     state_version: u32,
@@ -112,7 +113,7 @@ impl Metrics {
     /// This allows us to unit test the data transformation without initializing the full Tauri runtime.
     pub fn from_engine(engine: &mut AudioEngine) -> Self {
         let is_running = engine.is_running();
-        let (_, cpu, level, spectrum, tonality, version) = engine.metrics.get();
+        let (_, cpu, level, buffer_size, spectrum, tonality, version) = engine.metrics.get();
 
         // If not running, latency should be reported as 0.0
         let latency = if !is_running {
@@ -125,6 +126,7 @@ impl Metrics {
             latency_ms: latency.round(),
             cpu_usage: (cpu * 10.0).round() / 10.0,
             input_level: level,
+            buffer_size,
             spectrum,
             tonality,
             state_version: version,
@@ -143,7 +145,16 @@ async fn get_metrics(state: State<'_, AppState>) -> std::result::Result<Metrics,
     // Process garbage collected from the audio thread
     engine.process_garbage();
 
-    Ok(Metrics::from_engine(&mut engine))
+    let metrics = Metrics::from_engine(&mut engine);
+    if metrics.state_version % 100 == 0 {
+        log::debug!(
+            "Telemetry - Buffer: {} smp, Rate: {} Hz",
+            metrics.buffer_size,
+            engine.get_engine_state().sample_rate
+        );
+    }
+
+    Ok(metrics)
 }
 
 #[cfg(test)]

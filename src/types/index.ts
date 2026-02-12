@@ -47,6 +47,7 @@ export interface EngineMetrics {
   latency_ms: number;
   cpu_usage: number;
   input_level: number;
+  buffer_size: number;
   spectrum: number[];
   tonality: number[];
   state_version: number;
@@ -64,6 +65,7 @@ export interface EngineState {
   modules: ModuleInfo[];
   is_running: boolean;
   sample_rate: number;
+  buffer_size: number;
 }
 
 export type ModuleConfig =

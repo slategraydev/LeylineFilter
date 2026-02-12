@@ -18,6 +18,7 @@ export function useEngine() {
     latency_ms: 0,
     cpu_usage: 0,
     input_level: 0,
+    buffer_size: 256,
     spectrum: Array(12).fill(0),
     tonality: Array(12).fill(0),
     state_version: 0,
@@ -70,11 +71,22 @@ export function useEngine() {
   }, [lastVersion]); // Dependency on lastVersion to ensure state updates correctly in closure
 
   const startEngine = async (inputDevice: string, outputDevice: string) => {
-    await invoke("start_engine", {
-      input_device: inputDevice === "Default" ? null : inputDevice,
-      output_device: outputDevice === "Default" ? null : outputDevice,
-    });
-    setIsRunning(true);
+    try {
+      console.log(`Starting engine with Input: ${inputDevice}, Output: ${outputDevice}`);
+      await invoke("start_engine", {
+        input_device: inputDevice === "Default" ? null : inputDevice,
+        output_device: outputDevice === "Default" ? null : outputDevice,
+      });
+      setIsRunning(true);
+      // Force a state refresh immediately after start
+      const state = await invoke<EngineState>("get_engine_state");
+      setEngineState(state);
+      setLastVersion(0);
+    } catch (e) {
+      console.error("Failed to start engine:", e);
+      alert(`Engine Error: ${e}`);
+      setIsRunning(false);
+    }
   };
 
   const stopEngine = async () => {

@@ -29,6 +29,7 @@ function App() {
     isRunning,
     inputDevices,
     outputDevices,
+    engineState,
     metrics,
     startEngine,
     stopEngine,
@@ -208,6 +209,7 @@ function App() {
             selectedOutput={selectedOutput}
             onInputChange={setSelectedInput}
             onOutputChange={setSelectedOutput}
+            onToggle={toggleEngine}
           />
         </div>
 
@@ -228,11 +230,11 @@ function App() {
             </div>
             <div className="metric">
               <label>Sample Rate</label>
-              <span>48.0 kHz</span>
+              <span>{isRunning && engineState ? `${(engineState.sample_rate / 1000).toFixed(1)} kHz` : "---"}</span>
             </div>
             <div className="metric">
               <label>Buffer</label>
-              <span>256 smp</span>
+              <span>{isRunning ? `${metrics.buffer_size || (engineState?.buffer_size ?? "---")} smp` : "---"}</span>
             </div>
           </div>
         </div>

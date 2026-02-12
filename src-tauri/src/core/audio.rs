@@ -48,6 +48,7 @@ pub struct EngineMetrics {
     pub output_latency_ms: AtomicU32,
     pub cpu_usage: AtomicU32,
     pub input_level: AtomicU32,
+    pub buffer_size: AtomicU32,
     pub spectrum: [AtomicU32; 12],
     pub tonality: [AtomicU32; 12],
     pub state_version: AtomicU32,
@@ -61,6 +62,7 @@ impl EngineMetrics {
             output_latency_ms: AtomicU32::new(0),
             cpu_usage: AtomicU32::new(0),
             input_level: AtomicU32::new(0),
+            buffer_size: AtomicU32::new(256),
             spectrum: Default::default(),
             tonality: Default::default(),
             state_version: AtomicU32::new(0),
@@ -80,7 +82,7 @@ impl EngineMetrics {
         }
     }
 
-    pub fn get(&self) -> (f32, f32, f32, [f32; 12], [f32; 12], u32) {
+    pub fn get(&self) -> (f32, f32, f32, u32, [f32; 12], [f32; 12], u32) {
         let mut bins = [0.0f32; 12];
         let mut tonal = [0.0f32; 12];
         for i in 0..12 {
@@ -91,6 +93,7 @@ impl EngineMetrics {
             f32::from_bits(self.latency_ms.load(Ordering::Relaxed)),
             f32::from_bits(self.cpu_usage.load(Ordering::Relaxed)),
             f32::from_bits(self.input_level.load(Ordering::Relaxed)),
+            self.buffer_size.load(Ordering::Relaxed),
             bins,
             tonal,
             self.state_version.load(Ordering::Relaxed),
@@ -122,6 +125,7 @@ pub struct AudioEngine {
     pid: sysinfo::Pid,
     sample_rate: f32,
     internal_sample_rate: f32,
+    buffer_size: u32,
     last_latency: f32,
     last_cpu: f32,
     rb_occupancy: Arc<AtomicUsize>,
@@ -141,6 +145,21 @@ impl AudioEngine {
         sys.refresh_all();
         let pid = sysinfo::get_current_pid().expect("Failed to get current PID");
 
+        // Query hardware for initial UI state
+        let host = cpal::default_host();
+        let (initial_sr, initial_bs) = if let Some(device) = host.default_output_device() {
+            if let Ok(config) = device.default_output_config() {
+                let sr = config.sample_rate().0 as f32;
+                // For buffer size, WASAPI Default is often opaque until stream starts,
+                // but we can try to guess or use a sensible default that updates later.
+                (sr, 256)
+            } else {
+                (48000.0, 256)
+            }
+        } else {
+            (48000.0, 256)
+        };
+
         Self {
             input_stream: None,
             output_stream: None,
@@ -149,8 +168,9 @@ impl AudioEngine {
             metrics: Arc::new(EngineMetrics::new()),
             sys,
             pid,
-            sample_rate: 48000.0,
-            internal_sample_rate: 48000.0,
+            sample_rate: initial_sr,
+            internal_sample_rate: initial_sr,
+            buffer_size: initial_bs,
             last_latency: 0.0,
             last_cpu: 0.0,
             rb_occupancy: Arc::new(AtomicUsize::new(0)),
@@ -158,7 +178,8 @@ impl AudioEngine {
             chain_state: Arc::new(Mutex::new(EngineState {
                 modules: Vec::new(),
                 is_running: false,
-                sample_rate: 48000.0,
+                sample_rate: initial_sr,
+                buffer_size: initial_bs,
             })),
             last_cpu_update: Instant::now(),
             vis_thread: None,
@@ -304,6 +325,7 @@ impl AudioEngine {
                 modules: Vec::new(),
                 is_running: false,
                 sample_rate: self.sample_rate,
+                buffer_size: self.buffer_size,
             }
         }
     }
@@ -327,6 +349,8 @@ impl AudioEngine {
         output_device_name: Option<String>,
     ) -> EngineResult<()> {
         let host = cpal::default_host();
+
+        log::info!("Using audio host: {:?}", host.id());
 
         let input_device = if let Some(name) = input_device_name {
             if name == "Default" {
@@ -352,8 +376,16 @@ impl AudioEngine {
         }
         .ok_or_else(|| EngineError::DeviceError("Output device not found".to_string()))?;
 
-        let input_config: cpal::StreamConfig = input_device.default_input_config()?.into();
-        let output_config: cpal::StreamConfig = output_device.default_output_config()?.into();
+        let mut input_config: cpal::StreamConfig = input_device.default_input_config()?.into();
+        let mut output_config: cpal::StreamConfig = output_device.default_output_config()?.into();
+
+        // Use Default for maximum compatibility on WASAPI
+        input_config.buffer_size = cpal::BufferSize::Default;
+        output_config.buffer_size = cpal::BufferSize::Default;
+
+        log::info!("Opening streams with Default buffer size...");
+        log::info!("Input Config: {:?}", input_config);
+        log::info!("Output Config: {:?}", output_config);
 
         let in_sample_rate = input_config.sample_rate.0 as f64;
         let out_sample_rate = output_config.sample_rate.0 as f64;
@@ -413,7 +445,8 @@ impl AudioEngine {
         mod_lat_atomic.store(initial_lat, Ordering::Relaxed);
 
         if let Ok(mut state_lock) = self.chain_state.lock() {
-            *state_lock = chain.get_state(true);
+            *state_lock = chain.get_state(true, 0); // Start with 0, will be updated by callback
+            self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
         }
 
         // Setup Audio Ring Buffer
@@ -536,7 +569,8 @@ impl AudioEngine {
                     mod_lat_atomic.store(total_lat, Ordering::Relaxed);
                     // Try-lock for UI sync (best effort)
                     if let Ok(mut state_lock) = chain_state_clone.try_lock() {
-                        *state_lock = chain.get_state(true);
+                        let current_buf = metrics.buffer_size.load(Ordering::Relaxed);
+                        *state_lock = chain.get_state(true, current_buf);
                         metrics.state_version.fetch_add(1, Ordering::Relaxed);
                     }
                 }
@@ -624,6 +658,9 @@ impl AudioEngine {
 
                 let out_channels = output_config.channels as usize;
                 let frames_needed = data.len() / out_channels;
+                metrics_out
+                    .buffer_size
+                    .store(frames_needed as u32, Ordering::Relaxed);
 
                 for i in 0..frames_needed {
                     let sample = consumer.try_pop().unwrap_or(0.0);
@@ -660,6 +697,7 @@ impl AudioEngine {
 
             if let Ok(mut state_lock) = self.chain_state.lock() {
                 state_lock.is_running = false;
+                self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
             }
 
             // Stop visualizer

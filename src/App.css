@@ -385,6 +385,7 @@ body {
 }
 
 @keyframes flow {
+
     0% {
         stroke-dashoffset: 100;
         stroke-dasharray: 20 80;
