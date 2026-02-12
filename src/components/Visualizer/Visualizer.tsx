@@ -33,7 +33,6 @@ function LeylineLogo() {
         <line x1="10" y1="50" x2="90" y2="50" className="leyline line-2" />
         <line x1="10" y1="55" x2="90" y2="55" className="leyline line-3" />
       </svg>
-      <span className="logo-text">READY</span>
     </div>
   );
 }

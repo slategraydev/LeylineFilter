@@ -56,6 +56,11 @@ describe("App Smoke Test", () => {
     expect(latencyDisplay).toHaveTextContent("0 ms");
   });
 
+  it("renders the engine toggle button", () => {
+    render(<App />);
+    expect(screen.getByText(/Start Engine/i)).toBeInTheDocument();
+  });
+
   it("rounds latency to the nearest whole number", async () => {
     vi.mocked(invoke).mockImplementation(async (cmd) => {
       if (cmd === "get_input_devices") return ["Mic 1"];

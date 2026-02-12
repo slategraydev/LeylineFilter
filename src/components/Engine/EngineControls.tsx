@@ -55,12 +55,6 @@ export function EngineControls({
           </label>
         </div>
       </div>
-      <button
-        className={`engine-toggle ${isRunning ? "stop" : "start"}`}
-        onClick={onToggle}
-      >
-        {isRunning ? "Stop Engine" : "Start Engine"}
-      </button>
     </div>
   );
 }

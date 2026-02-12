@@ -8,7 +8,7 @@ interface RNNoiseModuleProps {
 }
 
 export function RNNoiseModule({
-  title = "Noise Suppression (RNNoise)",
+  title = "Noise Suppression",
   config,
   onChange
 }: RNNoiseModuleProps) {

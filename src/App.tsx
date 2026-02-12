@@ -169,53 +169,94 @@ function App() {
           <h1>
             LEYLINE<span>FILTER</span>
           </h1>
+          <p className="sidebar-description">Neural Audio Engine</p>
         </header>
 
-        <EngineControls
-          isRunning={isRunning}
-          inputDevices={inputDevices}
-          outputDevices={outputDevices}
-          selectedInput={selectedInput}
-          selectedOutput={selectedOutput}
-          onInputChange={setSelectedInput}
-          onOutputChange={setSelectedOutput}
-          onToggle={toggleEngine}
-        />
-
-        <div className="metrics-panel">
-          <div className="metric">
-            <label>Latency</label>
-            <span data-testid="latency-value">
-              {`${Math.round(metrics.latency_ms)} ms`}
-            </span>
+        <div className="sidebar-section">
+          <div className="section-label">
+            <span>I/O Config</span>
           </div>
-          <div className="metric">
-            <label>CPU Usage</label>
-            <span>{metrics.cpu_usage}%</span>
+          <EngineControls
+            isRunning={isRunning}
+            inputDevices={inputDevices}
+            outputDevices={outputDevices}
+            selectedInput={selectedInput}
+            selectedOutput={selectedOutput}
+            onInputChange={setSelectedInput}
+            onOutputChange={setSelectedOutput}
+          />
+        </div>
+
+        <div className="sidebar-section">
+          <div className="section-label">
+            <span>System Telemetry</span>
+          </div>
+          <div className="metrics-panel">
+            <div className="metric">
+              <label>Latency</label>
+              <span data-testid="latency-value">
+                {`${Math.round(metrics.latency_ms)} ms`}
+              </span>
+            </div>
+            <div className="metric">
+              <label>CPU Usage</label>
+              <span>{metrics.cpu_usage}%</span>
+            </div>
+            <div className="metric">
+              <label>Sample Rate</label>
+              <span>48.0 kHz</span>
+            </div>
+            <div className="metric">
+              <label>Buffer</label>
+              <span>256 smp</span>
+            </div>
           </div>
         </div>
 
-        <Visualizer
-          isRunning={isRunning}
-          spectrum={metrics.spectrum}
-          tonality={metrics.tonality}
-        />
+        <div className="sidebar-section visualizer-section">
+          <div className="section-label">
+            <span>Visualizer</span>
+          </div>
+          <div className="visualizer-wrapper">
+            <Visualizer
+              isRunning={isRunning}
+              spectrum={metrics.spectrum}
+              tonality={metrics.tonality}
+            />
+          </div>
+        </div>
+
+        <div className="sidebar-footer">
+          <button
+            className={`engine-toggle ${isRunning ? "stop" : "start"}`}
+            onClick={toggleEngine}
+          >
+            {isRunning ? "Stop Engine" : "Start Engine"}
+          </button>
+        </div>
       </aside>
 
       <main className="module-grid">
-        <GainModule config={gainConfig} onChange={setGainConfig} />
-        <RNNoiseModule config={rnnoiseConfig} onChange={setRnnoiseConfig} />
-        <ExpanderModule config={expanderConfig} onChange={setExpanderConfig} />
-        <FilterModule config={filterConfig} onChange={setFilterConfig} />
+        <GainModule
+          config={gainConfig}
+          onChange={setGainConfig}
+        />
+        <RNNoiseModule
+          config={rnnoiseConfig}
+          onChange={setRnnoiseConfig}
+        />
+        <ExpanderModule
+          config={expanderConfig}
+          onChange={setExpanderConfig}
+        />
+        <FilterModule
+          config={filterConfig}
+          onChange={setFilterConfig}
+        />
 
         {/* Placeholder for future modules */}
         <div className="module-card placeholder">
-          <div className="module-header">
-            <h3>Add Module</h3>
-          </div>
-          <div className="module-content">
-            <button className="add-btn">+</button>
-          </div>
+          <button className="add-btn">+</button>
         </div>
       </main>
     </div>

@@ -11,7 +11,6 @@ describe("Visualizer", () => {
         tonality={Array(12).fill(0)}
       />,
     );
-    expect(screen.getByText(/READY/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Logo/i)).toBeInTheDocument();
   });
 
@@ -34,6 +33,5 @@ describe("Visualizer", () => {
     heights.forEach((h) => {
       expect(h).toBeGreaterThan(0);
     });
-    expect(screen.queryByText(/READY/i)).not.toBeInTheDocument();
   });
 });

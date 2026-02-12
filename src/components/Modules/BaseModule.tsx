@@ -18,7 +18,9 @@ export function BaseModule({ title, enabled, onToggle, children }: BaseModulePro
   return (
     <div className={`module-card ${enabled ? 'active' : 'inactive'}`}>
       <div className="module-header">
-        <h3>{title}</h3>
+        <div className="header-left">
+          <h3>{title}</h3>
+        </div>
         <label className="switch">
           <input
             type="checkbox"
