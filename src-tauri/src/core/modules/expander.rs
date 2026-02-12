@@ -13,6 +13,9 @@ pub struct ExpanderModule {
     envelope: f32,
     gain: f32,
     enabled: bool,
+    attack_coeff: f32,
+    release_coeff: f32,
+    smoothing_coeff: f32,
 }
 
 impl ExpanderModule {
@@ -21,7 +24,7 @@ impl ExpanderModule {
     /// # Arguments
     /// * `sample_rate` - The sample rate at which the audio will be processed.
     pub fn new(sample_rate: f32) -> Self {
-        Self {
+        let mut m = Self {
             threshold: 0.08,
             ratio: 2.0,
             attack_ms: 10.0,
@@ -30,7 +33,19 @@ impl ExpanderModule {
             envelope: 0.0,
             gain: 1.0,
             enabled: true,
-        }
+            attack_coeff: 0.0,
+            release_coeff: 0.0,
+            smoothing_coeff: 0.0,
+        };
+        m.update_coefficients();
+        m
+    }
+
+    fn update_coefficients(&mut self) {
+        self.attack_coeff = (-1.0 / (self.attack_ms * self.sample_rate / 1000.0)).exp();
+        self.release_coeff = (-1.0 / (self.release_ms * self.sample_rate / 1000.0)).exp();
+        // 10ms smoothing for gain changes
+        self.smoothing_coeff = (-1.0 / (10.0 * self.sample_rate / 1000.0)).exp();
     }
 }
 
@@ -41,6 +56,11 @@ impl AudioModule for ExpanderModule {
 
     fn is_enabled(&self) -> bool {
         self.enabled
+    }
+
+    fn prepare(&mut self, sample_rate: f32) {
+        self.sample_rate = sample_rate;
+        self.update_coefficients();
     }
 
     fn update_config(&mut self, config: &ModuleConfig) {
@@ -54,6 +74,8 @@ impl AudioModule for ExpanderModule {
             self.attack_ms = attack_ms.clamp(0.1, 1000.0);
             self.release_ms = release_ms.clamp(1.0, 5000.0);
 
+            self.update_coefficients();
+
             log::debug!(
                 "Expander updated: enabled={}, threshold={}, ratio={}, attack={}ms, release={}ms",
                 self.enabled, self.threshold, self.ratio, self.attack_ms, self.release_ms
@@ -66,20 +88,14 @@ impl AudioModule for ExpanderModule {
             return;
         }
 
-        let attack_coeff = (-1.0 / (self.attack_ms * self.sample_rate / 1000.0)).exp();
-        let release_coeff = (-1.0 / (self.release_ms * self.sample_rate / 1000.0)).exp();
-
-        // 10ms smoothing for gain changes
-        let smoothing_coeff = (-1.0 / (10.0 * self.sample_rate / 1000.0)).exp();
-
         for sample in samples.iter_mut() {
             let input_abs = sample.abs();
 
             // Simple envelope follower
             if input_abs > self.envelope {
-                self.envelope = attack_coeff * (self.envelope - input_abs) + input_abs;
+                self.envelope = self.attack_coeff * (self.envelope - input_abs) + input_abs;
             } else {
-                self.envelope = release_coeff * (self.envelope - input_abs) + input_abs;
+                self.envelope = self.release_coeff * (self.envelope - input_abs) + input_abs;
             }
 
             // Calculate target gain based on the ratio and threshold
@@ -94,11 +110,12 @@ impl AudioModule for ExpanderModule {
             };
 
             // Smooth gain changes to prevent clicking, sample-rate dependent
-            self.gain = smoothing_coeff * (self.gain - target_gain) + target_gain;
+            self.gain = self.smoothing_coeff * (self.gain - target_gain) + target_gain;
             *sample *= self.gain;
         }
     }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -135,5 +152,15 @@ mod tests {
         expander.process(&mut samples);
 
         assert_eq!(samples, original);
+    }
+
+    #[test]
+    fn test_expander_prepare() {
+        let mut expander = ExpanderModule::new(44100.0);
+        let initial_attack = expander.attack_coeff;
+
+        expander.prepare(48000.0);
+        assert_ne!(expander.attack_coeff, initial_attack);
+        assert_eq!(expander.sample_rate, 48000.0);
     }
 }

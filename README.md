@@ -4,9 +4,10 @@ LeylineFilter is a high-performance, modular audio processing engine built with 
 
 ## Features
 
-- **Modular Architecture**: Easily extensible audio processing pipeline.
+- **Modular Architecture**: Easily extensible audio processing pipeline with a lifecycle-aware `prepare` hook for modules.
+- **Sample Rate Independence**: Full support for arbitrary hardware sample rates (44.1kHz, 48kHz, 96kHz, etc.) with automatic engine adaptation.
 - **Real-time Safety**: Lock-free audio threading for glitch-free performance.
-- **Low Latency**: Optimized DSP routines and efficient resampling.
+- **Low Latency**: Optimized DSP routines and smart resampling that only engages when hardware input/output rates differ.
 - **Cross-Platform**: Built on Tauri for a lightweight, native experience on Windows, macOS, and Linux.
 - **Biometric Sound Gate**: Advanced expander module designed for biometric audio filtering.
 

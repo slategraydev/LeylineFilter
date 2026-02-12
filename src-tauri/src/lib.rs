@@ -5,7 +5,7 @@ mod error;
 use crate::core::audio::{AudioEngine};
 use crate::core::traits::{ModuleConfig};
 use std::sync::{Arc, Mutex};
-use tauri::{State};
+use tauri::{State, Manager};
 use serde::{Serialize, Deserialize};
 
 /// Global application state.
@@ -98,6 +98,10 @@ async fn get_metrics(state: State<'_, AppState>) -> std::result::Result<Metrics,
 }
 
 /// The main entry point for the Tauri application.
+///
+/// Initializes the global state, sets up the logger, and builds the Tauri application.
+/// It also handles the application lifecycle, ensuring that the audio engine is
+/// stopped gracefully when the application exits.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     utils::logger::init();
@@ -120,9 +124,10 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app_handle, event| {
+        .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
                 log::info!("Application exiting...");
+                let _ = app_handle.state::<AppState>().engine.lock().map(|mut engine| engine.stop());
             }
         });
 }

@@ -9,6 +9,95 @@ use std::time::Instant;
 use ringbuf::HeapRb;
 use ringbuf::traits::{Producer, Consumer, Split, Observer};
 use sysinfo::System;
+use rustfft::{FftPlanner, Fft, num_complex::Complex};
+
+/// Pre-allocated state for audio visualization to ensure real-time safety.
+struct VisualizerState {
+    fft: Arc<dyn Fft<f32>>,
+    fft_buffer: Vec<Complex<f32>>,
+    scratch_buffer: Vec<Complex<f32>>,
+}
+
+impl VisualizerState {
+    fn new(chunk_size: usize) -> Self {
+        let mut planner = FftPlanner::new();
+        let fft = planner.plan_fft_forward(chunk_size);
+        Self {
+            fft_buffer: vec![Complex::default(); chunk_size],
+            scratch_buffer: vec![Complex::default(); fft.get_inplace_scratch_len()],
+            fft,
+        }
+    }
+
+    fn process(&mut self, chunk: &[f32], sample_rate: f32, metrics: &EngineMetrics) {
+        // Copy chunk into FFT buffer
+        for (i, &sample) in chunk.iter().enumerate() {
+            if i < self.fft_buffer.len() {
+                self.fft_buffer[i] = Complex { re: sample, im: 0.0 };
+            }
+        }
+
+        // Perform FFT
+        self.fft.process_with_scratch(&mut self.fft_buffer, &mut self.scratch_buffer);
+
+        // Map FFT bins to 12 UI bars (logarithmic distribution)
+        let mut spectrum_bins = [0.0f32; 12];
+        let mut tonality_bins = [0.0f32; 12];
+        let num_bins = self.fft_buffer.len() / 2;
+
+        if num_bins > 0 {
+            let f_min = 80.0f32;
+            let f_max = 20000.0f32;
+            let bin_sz = sample_rate / chunk.len() as f32;
+
+            for i in 0..12 {
+                let freq_start = f_min * (f_max / f_min).powf(i as f32 / 12.0);
+                let freq_end = f_min * (f_max / f_min).powf((i + 1) as f32 / 12.0);
+
+                let start_bin = (freq_start / bin_sz).floor() as usize;
+                let end_bin = (freq_end / bin_sz).ceil() as usize;
+
+                let start_bin = start_bin.min(num_bins);
+                let end_bin = end_bin.max(start_bin + 1).min(num_bins);
+
+                let mut sum = 0.0f32;
+                let mut max_bin_val = 0.0f32;
+                let count = (end_bin - start_bin).max(1);
+
+                for b in start_bin..end_bin {
+                    let val = self.fft_buffer[b].norm();
+                    sum += val;
+                    if val > max_bin_val {
+                        max_bin_val = val;
+                    }
+                }
+
+                let avg = sum / count as f32;
+                let normalized_mag = avg / (num_bins as f32);
+                let db = 20.0 * normalized_mag.max(1e-6).log10();
+                let linear_val = ((db + 60.0) / 60.0).clamp(0.0, 1.0);
+                spectrum_bins[i] = linear_val.sqrt();
+
+                if avg > 1e-6 {
+                    let ratio = max_bin_val / avg;
+                    let threshold = (count as f32).sqrt().max(2.0);
+                    tonality_bins[i] = (ratio / (threshold * 1.5)).min(1.0);
+                }
+            }
+        }
+
+        // Peak level calculation
+        let mut peak = 0.0f32;
+        for &sample in chunk {
+            let abs = sample.abs();
+            if abs > peak {
+                peak = abs;
+            }
+        }
+
+        metrics.update_processing_metrics(0.0, peak, &spectrum_bins, &tonality_bins);
+    }
+}
 
 /// A wrapper around `cpal::Stream` to allow it to be sent across threads.
 ///
@@ -146,8 +235,9 @@ impl AudioEngine {
         // Processing latency (from metrics)
         let processing_ms = f32::from_bits(self.metrics.latency_ms.load(Ordering::Relaxed));
 
-        // Accumulator latency (480 samples)
-        let chunk_latency_ms = (480.0 / self.sample_rate) * 1000.0;
+        // Accumulator latency (10ms)
+        let chunk_size = (self.sample_rate * 0.01) as usize;
+        let chunk_latency_ms = (chunk_size as f32 / self.sample_rate) * 1000.0;
 
         // Ring buffer occupancy latency
         let rb_samples = self.rb_occupancy.load(Ordering::Relaxed);
@@ -253,7 +343,10 @@ impl AudioEngine {
         let output_config: cpal::StreamConfig = output_device.default_output_config()?.into();
 
         let in_sample_rate = input_config.sample_rate.0 as f64;
+        let out_sample_rate = output_config.sample_rate.0 as f64;
         let in_channels = input_config.channels as usize;
+
+        self.sample_rate = out_sample_rate as f32;
 
         let modules = self.modules.clone();
         let metrics = self.metrics.clone();
@@ -261,224 +354,149 @@ impl AudioEngine {
         let rb_occ_in = self.rb_occupancy.clone();
         let rb_occ_out = self.rb_occupancy.clone();
 
+        // Notify all modules of the current sample rate
+        if let Ok(mut modules_lock) = modules.lock() {
+            for module in modules_lock.iter_mut() {
+                module.prepare(self.sample_rate);
+            }
+        }
+
         // Use a lock-free ring buffer for real-time safe audio transfer
-        let rb = HeapRb::<f32>::new(4800 * 2);
+        // Size it for roughly 1 second of audio at the current sample rate
+        let rb = HeapRb::<f32>::new((self.sample_rate as usize * 2).max(4800 * 2));
         let (mut producer, mut consumer) = rb.split();
 
-        // Setup resampling if necessary
-        let mut resampler = if (in_sample_rate - 48000.0).abs() > 1.0 {
+        // Setup resampling if input rate differs from output rate
+        let mut resampler = if (in_sample_rate - out_sample_rate).abs() > 1.0 {
             Some(FastFixedIn::<f32>::new(
-                48000.0 / in_sample_rate,
+                out_sample_rate / in_sample_rate,
                 2.0,
                 PolynomialDegree::Cubic,
-                480,
+                (out_sample_rate as f32 * 0.01) as usize, // 10ms chunk
                 1,
             ).map_err(|e| EngineError::ResamplerError(e.to_string()))?)
         } else {
             None
         };
 
-        let mut input_accumulator = Vec::new();
-        let mut process_accumulator = Vec::new();
-        let mut resample_input = vec![vec![0.0f32; 0]];
+                        // Target 10ms chunk size for processing
+                        let chunk_size = (self.sample_rate * 0.01) as usize;
+                        let mut visualizer = VisualizerState::new(chunk_size);
+                        let mut working_chunk = vec![0.0f32; chunk_size];
 
-        let input_stream = input_device.build_input_stream(
-            &input_config,
-            move |data: &[f32], info: &cpal::InputCallbackInfo| {
-                // Calculate hardware input latency
-                let callback = info.timestamp().callback;
-                let capture = info.timestamp().capture;
-                if let Some(diff) = callback.duration_since(&capture) {
-                    let ms = diff.as_secs_f32() * 1000.0;
-                    metrics.input_latency_ms.store(ms.to_bits(), Ordering::Relaxed);
-                }
+                        // Pre-allocate accumulators to avoid reallocations in the audio thread.
+                        // 100ms worth of audio should be more than enough for jitter.
+                        let mut input_accumulator = Vec::with_capacity((self.sample_rate * 0.1) as usize);
+                        let mut process_accumulator = Vec::with_capacity((self.sample_rate * 0.1) as usize);
+                        let mut resample_input = vec![vec![0.0f32; 0]];
 
-                // Take only the first channel (mono)
-                for frame in data.chunks(in_channels) {
-                    input_accumulator.push(frame[0]);
-                }
+                        let input_stream = input_device.build_input_stream(
+                            &input_config,
+                            move |data: &[f32], info: &cpal::InputCallbackInfo| {
+                                let start_time = Instant::now();
+                                let callback = info.timestamp().callback;
+                                let capture = info.timestamp().capture;
+                                if let Some(diff) = callback.duration_since(&capture) {
+                                    let ms = diff.as_secs_f32() * 1000.0;
+                                    metrics.input_latency_ms.store(ms.to_bits(), Ordering::Relaxed);
+                                }
 
-                if let Some(ref mut rs) = resampler {
-                    while input_accumulator.len() >= rs.input_frames_next() {
-                        let chunk: Vec<f32> = input_accumulator.drain(0..rs.input_frames_next()).collect();
-                        resample_input[0] = chunk;
-                        if let Ok(resampled) = rs.process(&resample_input, None) {
-                            process_accumulator.extend_from_slice(&resampled[0]);
-                        }
-                    }
-                } else {
-                    process_accumulator.extend_from_slice(&input_accumulator);
-                    input_accumulator.clear();
-                }
+                                // Take only the first channel (mono)
+                                for frame in data.chunks(in_channels) {
+                                    input_accumulator.push(frame[0]);
+                                }
 
-                // Process in chunks of 480 samples
-                while process_accumulator.len() >= 480 {
-                    let chunk: Vec<f32> = process_accumulator.drain(0..480).collect();
-                    process_audio_chunk(&chunk, &modules, &metrics, &mut producer, &rb_occ_in);
-                }
-            },
-            |err| log::error!("Input stream error: {}", err),
-            None
-        )?;
+                                if let Some(ref mut rs) = resampler {
+                                    while input_accumulator.len() >= rs.input_frames_next() {
+                                        let chunk: Vec<f32> = input_accumulator.drain(0..rs.input_frames_next()).collect();
+                                        resample_input[0] = chunk;
+                                        if let Ok(resampled) = rs.process(&resample_input, None) {
+                                            process_accumulator.extend_from_slice(&resampled[0]);
+                                        }
+                                    }
+                                } else {
+                                    process_accumulator.extend_from_slice(&input_accumulator);
+                                    input_accumulator.clear();
+                                }
 
-        let output_stream = output_device.build_output_stream(
-            &output_config,
-            move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
-                // Calculate hardware output latency
-                let callback = info.timestamp().callback;
-                let playback = info.timestamp().playback;
-                if let Some(diff) = playback.duration_since(&callback) {
-                    let ms = diff.as_secs_f32() * 1000.0;
-                    metrics_out.output_latency_ms.store(ms.to_bits(), Ordering::Relaxed);
-                }
+                                // Process in chunks
+                                let sr = out_sample_rate as f32;
+                                while process_accumulator.len() >= chunk_size {
+                                    // Copy into pre-allocated working chunk using drain for O(N)
+                                    for (i, sample) in process_accumulator.drain(0..chunk_size).enumerate() {
+                                        working_chunk[i] = sample;
+                                    }
 
-                let out_channels = output_config.channels as usize;
-                let frames_needed = data.len() / out_channels;
+                                    if let Ok(mut modules_lock) = modules.try_lock() {
+                                        for module in modules_lock.iter_mut() {
+                                            module.process(&mut working_chunk);
+                                        }
+                                    }
 
-                for i in 0..frames_needed {
-                    let sample = consumer.try_pop().unwrap_or(0.0);
-                    for c in 0..out_channels {
-                        data[i * out_channels + c] = sample;
-                    }
-                }
-                rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
-            },
-            |err| log::error!("Output stream error: {}", err),
-            None
-        )?;
+                                    producer.push_slice(&working_chunk);
+                                    rb_occ_in.store(producer.occupied_len(), Ordering::Relaxed);
 
-        input_stream.play()?;
-        output_stream.play()?;
+                                    // Visualization
+                                    visualizer.process(&working_chunk, sr, &metrics);
 
-        self.input_stream = Some(StreamWrapper(input_stream));
-        self.output_stream = Some(StreamWrapper(output_stream));
+                                    // Update processing time metric (for latency calculation)
+                                    let elapsed = start_time.elapsed().as_secs_f32() * 1000.0;
+                                    metrics.latency_ms.store(elapsed.to_bits(), Ordering::Relaxed);
+                                }
+                            },
+                            |err| {
+                                log::error!("Input stream error: {}", err);
+                            },
+                            None
+                        )?;
 
-        log::info!("Audio engine started successfully");
-        Ok(())
-    }
+                        let output_stream = output_device.build_output_stream(
+                            &output_config,
+                            move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
+                                // Calculate hardware output latency
+                                let callback = info.timestamp().callback;
+                                let playback = info.timestamp().playback;
+                                if let Some(diff) = playback.duration_since(&callback) {
+                                    let ms = diff.as_secs_f32() * 1000.0;
+                                    metrics_out.output_latency_ms.store(ms.to_bits(), Ordering::Relaxed);
+                                }
 
-    /// Stops the audio engine and drops the streams.
-    pub fn stop(&mut self) {
-        self.input_stream = None;
-        self.output_stream = None;
-        log::info!("Audio engine stopped");
-    }
-}
+                                let out_channels = output_config.channels as usize;
+                                let frames_needed = data.len() / out_channels;
 
-use rustfft::{FftPlanner, num_complex::Complex};
+                                for i in 0..frames_needed {
+                                    let sample = consumer.try_pop().unwrap_or(0.0);
+                                    for c in 0..out_channels {
+                                        data[i * out_channels + c] = sample;
+                                    }
+                                }
+                                rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
+                            },
+                            |err| log::error!("Output stream error: {}", err),
+                            None
+                        )?;
 
-/// Processes a single chunk of audio through all active modules.
-fn process_audio_chunk<P: Producer<Item = f32> + Observer>(
-    chunk: &[f32],
-    modules: &Arc<Mutex<Vec<Box<dyn AudioModule>>>>,
-    metrics: &Arc<EngineMetrics>,
-    producer: &mut P,
-    rb_occupancy: &Arc<AtomicUsize>,
-) {
-    let start = Instant::now();
-    let mut working_chunk = chunk.to_vec();
+                        input_stream.play()?;
+                        output_stream.play()?;
 
-    if let Ok(mut modules_lock) = modules.try_lock() {
-        for module in modules_lock.iter_mut() {
-            module.process(&mut working_chunk);
-        }
-    }
+                        self.input_stream = Some(StreamWrapper(input_stream));
+                        self.output_stream = Some(StreamWrapper(output_stream));
 
-    producer.push_slice(&working_chunk);
-    rb_occupancy.store(producer.occupied_len(), Ordering::Relaxed);
-
-    // Peak level calculation
-    let mut peak = 0.0f32;
-    for &sample in &working_chunk {
-        let abs = sample.abs();
-        if abs > peak {
-            peak = abs;
-        }
-    }
-
-    // FFT Analysis for true frequency visualization
-    let mut planner = FftPlanner::new();
-    let fft = planner.plan_fft_forward(working_chunk.len());
-
-    let mut buffer: Vec<Complex<f32>> = working_chunk
-        .iter()
-        .map(|&s| Complex { re: s, im: 0.0 })
-        .collect();
-
-    fft.process(&mut buffer);
-
-        // Map FFT bins to 12 UI bars (logarithmic distribution)
-        let mut spectrum_bins = [0.0f32; 12];
-        let mut tonality_bins = [0.0f32; 12];
-        let num_bins = buffer.len() / 2; // Nyquist limit (e.g., 240 bins for 48k SR)
-
-            if num_bins > 0 {
-                // Logarithmic distribution: Every bar covers an equal musical interval (octaves).
-                // We map from ~80Hz to ~20kHz.
-                // With a 480 chunk size at 48kHz, each bin is 100Hz.
-                let f_min = 80.0f32;
-                let f_max = 20000.0f32;
-                let bin_sz = 48000.0 / chunk.len() as f32;
-
-                for i in 0..12 {
-                    // Calculate frequency boundaries for this logarithmic bucket
-                    let freq_start = f_min * (f_max / f_min).powf(i as f32 / 12.0);
-                    let freq_end = f_min * (f_max / f_min).powf((i + 1) as f32 / 12.0);
-
-                    let start_bin = (freq_start / bin_sz).floor() as usize;
-                    let end_bin = (freq_end / bin_sz).ceil() as usize;
-
-                    // Clamp to valid range
-                    let start_bin = start_bin.min(num_bins);
-                    let end_bin = end_bin.max(start_bin + 1).min(num_bins);
-
-                    let mut sum = 0.0f32;
-                    let mut max_bin_val = 0.0f32;
-                    let count = (end_bin - start_bin).max(1);
-
-                    for b in start_bin..end_bin {
-                        let val = buffer[b].norm();
-                        sum += val;
-                        if val > max_bin_val {
-                            max_bin_val = val;
-                        }
+                        log::info!("Audio engine started successfully");
+                        Ok(())
                     }
 
-                                let avg = sum / count as f32;
-
-                                // Normalize FFT magnitude by the number of bins (N/2)
-                                // This ensures a full-scale sine wave results in a value of ~1.0
-                                let normalized_mag = avg / (num_bins as f32);
-
-                                            // Convert to decibels (dB)
-                                            // -60dB is a standard floor for UI meters
-                                            let db = 20.0 * normalized_mag.max(1e-6).log10();
-
-                                            // Map -60dB..0dB to 0.0..1.0
-                                            let linear_val = ((db + 60.0) / 60.0).clamp(0.0, 1.0);
-
-                                            // Apply a square root (quadratic) curve to the linear value.
-                                            // This makes the meter 'stay high' longer and gives more
-                                            // visual resolution to the quieter parts of the signal.
-                                            let normalized_val = linear_val.sqrt();
-
-                                            spectrum_bins[i] = normalized_val;
-                                                                            if avg > 1e-6 {
-                                                                                let ratio = max_bin_val / avg;
-                                                                                // Normalize the ratio requirement based on how many bins are in this bucket.
-                                                                                // Wider buckets (high end) require a higher ratio to be considered 'tonal'.
-                                                                                let threshold = (count as f32).sqrt().max(2.0);
-                                                                                tonality_bins[i] = (ratio / (threshold * 1.5)).min(1.0);
-                                                                                                        }
-                                                                                                    }
-                                                                                                }
-                                                                                let elapsed = start.elapsed().as_secs_f32() * 1000.0;
-                                                                                // We only update latency and visualizations here. CPU is updated globally.
-                                                                                metrics.update_processing_metrics(elapsed, peak, &spectrum_bins, &tonality_bins);
-                                                                            }
+                    /// Stops the audio engine and drops the streams.
+                    pub fn stop(&mut self) {
+                        self.input_stream = None;
+                        self.output_stream = None;
+                        log::info!("Audio engine stopped");
+                    }
+                }
 
 
-#[cfg(test)]
+                #[cfg(test)]
+
 mod tests {
     use super::*;
 
@@ -527,5 +545,20 @@ mod tests {
         // but for now we'll verify the engine starts at 0)
         let (_, cpu, _, _, _) = engine.metrics.get();
         assert_eq!(cpu, 0.0);
+    }
+
+    #[test]
+    fn test_chunk_size_logic() {
+        let sr_48k = 48000.0;
+        let chunk_48k = (sr_48k * 0.01) as usize;
+        assert_eq!(chunk_48k, 480);
+
+        let sr_44k = 44100.0;
+        let chunk_44k = (sr_44k * 0.01) as usize;
+        assert_eq!(chunk_44k, 441);
+
+        let sr_96k = 96000.0;
+        let chunk_96k = (sr_96k * 0.01) as usize;
+        assert_eq!(chunk_96k, 960);
     }
 }

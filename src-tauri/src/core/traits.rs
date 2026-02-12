@@ -31,6 +31,13 @@ pub trait AudioModule: Send + Sync {
     /// Returns the latency introduced by this module in samples.
     fn latency_samples(&self) -> usize { 0 }
 
+    /// Prepares the module for processing with a specific sample rate.
+    ///
+    /// This is called before any processing starts or when the sample rate changes.
+    /// # Arguments
+    /// * `sample_rate` - The sample rate in Hz.
+    fn prepare(&mut self, sample_rate: f32);
+
     /// Processes a block of audio samples in-place.
     ///
     /// # Arguments
