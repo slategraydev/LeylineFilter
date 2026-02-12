@@ -47,6 +47,20 @@ export interface EngineMetrics {
   tonality: number[];
 }
 
+export interface ModuleInfo {
+  id: string;
+  name: string;
+  category: "Dynamics" | "Filter" | "Voice" | "FX" | "Synth" | "Utility";
+  enabled: boolean;
+  config: ModuleConfig;
+}
+
+export interface EngineState {
+  modules: ModuleInfo[];
+  is_running: boolean;
+  sample_rate: number;
+}
+
 export type ModuleConfig =
   | { type: "Expander"; data: ExpanderConfig }
   | { type: "RNNoise"; data: RNNoiseConfig }

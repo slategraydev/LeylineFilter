@@ -78,6 +78,16 @@ impl AudioModule for ExpanderModule {
         }
     }
 
+    fn get_config(&self) -> ModuleConfig {
+        ModuleConfig::Expander {
+            enabled: self.enabled,
+            threshold: self.threshold.get_target(),
+            ratio: self.ratio.get_target(),
+            attack_ms: self.attack_ms,
+            release_ms: self.release_ms,
+        }
+    }
+
     fn process(&mut self, samples: &mut [f32]) {
         if !self.enabled {
             return;

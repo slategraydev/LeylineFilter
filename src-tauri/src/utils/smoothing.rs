@@ -40,6 +40,11 @@ impl ParameterSmoother {
         self.target_value = target;
     }
 
+    /// Returns the target value.
+    pub fn get_target(&self) -> f32 {
+        self.target_value
+    }
+
     /// Forces the smoother to a specific value, bypassing any smoothing.
     #[allow(dead_code)]
     pub fn reset(&mut self, value: f32) {

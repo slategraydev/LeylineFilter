@@ -140,6 +140,15 @@ impl BiquadModule {
             }
         }
 
+        fn get_config(&self) -> ModuleConfig {
+            ModuleConfig::Filter {
+                enabled: self.enabled,
+                filter_type: format!("{:?}", self.filter_type),
+                frequency: self.freq_smoother.get_target(),
+                q: self.q_smoother.get_target(),
+            }
+        }
+
         fn process(&mut self, samples: &mut [f32]) {
             if !self.enabled {
                 return;

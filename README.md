@@ -4,10 +4,12 @@ LeylineFilter is a high-performance, modular audio processing engine built with 
 
 ## Features
 
-- **Extensible Module Registry**: A categorical DSP chain supporting Dynamics, Voice, Filters, FX, and Synths.
+- **Dynamic Signal Chain**: A modular processing chain that supports adding, removing, and reordering modules in real-time without interrupting the audio stream.
+- **Unified Engine Bus**: A centralized `EngineCommand` system for controlling all aspects of the engine through a single thread-safe message channel.
+- **State Synchronization**: Real-time state reporting that keeps the UI perfectly in sync with the internal engine state using snapshots and snapshots.
 - **AI Noise Suppression**: Integration of **RNNoise**, using Gated Recurrent Units (GRU) to suppress non-stationary noise in real-time.
 - **Lock-Free Engine**: Strictly real-time safe audio thread using message passing via `crossbeam-channel` and lock-free ring buffers. No Mutex contention in the audio path.
-- **Smart Resampling Domains**: Engine-level optimization that resamples audio to a unified internal rate (e.g., 48kHz) only when required by the module chain, minimizing CPU usage and maximizing fidelity.
+- **Synth-Ready DSP**: Integrated with **fundsp** for high-performance functional DSP composition, enabling complex synth voices and custom processing chains.
 - **De-clicked Parameters**: All parameter changes (thresholds, ratios, bypass toggles) use exponential smoothing and cross-fading to prevent digital clicks and pops.
 - **Sample Rate Independence**: Full support for arbitrary hardware sample rates with automatic engine adaptation and high-quality resampling via `rubato`.
 - **Cross-Platform**: Built on Tauri v2 for a lightweight experience on Windows, macOS, and Linux.
@@ -33,8 +35,10 @@ src-tauri/
 │   │   │   ├── voice/     # RNNoise, VAD
 │   │   │   ├── filter/    # HPF, LPF, EQ
 │   │   │   ├── fx/        # Reverb, Delay
+│   │   │   ├── synth/     # Oscillators, Envelopes
 │   │   │   └── utility/   # Gain, AGC
 │   │   ├── audio.rs    # Main Lock-Free Audio Engine
+│   │   ├── chain.rs    # Dynamic Signal Chain management
 │   │   └── traits.rs   # AudioModule traits and config enums
 │   ├── utils/          # Utilities (Resampling, Smoothing, Logger)
 │   ├── error.rs        # Serialization-ready error handling

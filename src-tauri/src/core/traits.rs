@@ -51,6 +51,60 @@ pub enum ModuleConfig {
     None,
 }
 
+/// A MIDI message for synth and parameter control.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MidiMessage {
+    pub status: u8,
+    pub data1: u8,
+    pub data2: u8,
+}
+
+/// A unified command for controlling the audio engine.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "data")]
+pub enum EngineCommand {
+    /// Update the configuration of a specific module.
+    UpdateConfig(ModuleConfig),
+    /// Add a new module to the signal chain.
+    AddModule {
+        module_type: String,
+    },
+    /// Remove a module from the signal chain.
+    RemoveModule {
+        id: String,
+    },
+    /// Set a specific parameter of a module by ID.
+    SetParam {
+        id: String,
+        param: String,
+        value: f32,
+    },
+    /// Send a MIDI message to the engine.
+    MidiEvent(MidiMessage),
+    /// Reorder modules in the signal chain.
+    Reorder {
+        order: Vec<String>,
+    },
+}
+
+/// Information about a module for UI synchronization.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleInfo {
+    pub id: String,
+    pub name: String,
+    pub category: ModuleCategory,
+    pub enabled: bool,
+    pub config: ModuleConfig,
+}
+
+/// The complete state of the audio engine.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EngineState {
+    pub modules: Vec<ModuleInfo>,
+    pub is_running: bool,
+    pub sample_rate: f32,
+}
+
 /// Categories for audio modules to help with UI organization and processing order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModuleCategory {
@@ -103,4 +157,20 @@ pub trait AudioModule: Send + Sync {
     /// # Arguments
     /// * `config` - The new configuration to apply.
     fn update_config(&mut self, config: &ModuleConfig);
+
+    /// Returns the current configuration of the module.
+    fn get_config(&self) -> ModuleConfig;
+
+    /// Returns whether the module is currently enabled.
+    fn is_enabled(&self) -> bool {
+        match self.get_config() {
+            ModuleConfig::Expander { enabled, .. } => enabled,
+            ModuleConfig::RNNoise { enabled, .. } => enabled,
+            ModuleConfig::Gain { enabled, .. } => enabled,
+            ModuleConfig::Compressor { enabled, .. } => enabled,
+            ModuleConfig::Filter { enabled, .. } => enabled,
+            ModuleConfig::FX { enabled, .. } => enabled,
+            _ => true,
+        }
+    }
 }

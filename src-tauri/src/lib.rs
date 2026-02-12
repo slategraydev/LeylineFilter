@@ -3,7 +3,7 @@ mod utils;
 mod error;
 
 use crate::core::audio::{AudioEngine};
-use crate::core::traits::{ModuleConfig};
+use crate::core::traits::{ModuleConfig, EngineCommand, EngineState};
 use std::sync::{Arc, Mutex};
 use tauri::{State, Manager};
 use serde::{Serialize, Deserialize};
@@ -19,6 +19,21 @@ pub struct AppState {
 async fn update_config(state: State<'_, AppState>, config: ModuleConfig) -> std::result::Result<(), String> {
     let engine = state.engine.lock().map_err(|e| e.to_string())?;
     engine.update_module_config(config);
+    Ok(())
+}
+
+/// Tauri command to get the full engine state.
+#[tauri::command]
+async fn get_engine_state(state: State<'_, AppState>) -> std::result::Result<EngineState, String> {
+    let engine = state.engine.lock().map_err(|e| e.to_string())?;
+    Ok(engine.get_engine_state())
+}
+
+/// Tauri command to send a command to the engine.
+#[tauri::command]
+async fn send_command(state: State<'_, AppState>, command: EngineCommand) -> std::result::Result<(), String> {
+    let engine = state.engine.lock().map_err(|e| e.to_string())?;
+    engine.send_command(command);
     Ok(())
 }
 
@@ -120,7 +135,9 @@ pub fn run() {
             get_metrics,
             update_config,
             get_input_devices,
-            get_output_devices
+            get_output_devices,
+            get_engine_state,
+            send_command
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

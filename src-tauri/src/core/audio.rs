@@ -1,7 +1,8 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-use crate::core::traits::{AudioModule, ModuleConfig};
+use crate::core::traits::{ModuleConfig, EngineCommand, EngineState};
+use crate::core::chain::SignalChain;
 use crate::error::{EngineError, Result as EngineResult};
 use rubato::{Resampler, FastFixedIn, PolynomialDegree};
 use std::time::Instant;
@@ -159,7 +160,7 @@ pub struct AudioEngine {
     input_stream: Option<StreamWrapper>,
     output_stream: Option<StreamWrapper>,
     module_configs: Arc<Mutex<HashMap<String, ModuleConfig>>>,
-    config_tx: Arc<Mutex<Option<Sender<ModuleConfig>>>>,
+    command_tx: Arc<Mutex<Option<Sender<EngineCommand>>>>,
     pub metrics: Arc<EngineMetrics>,
     sys: System,
     pid: sysinfo::Pid,
@@ -168,6 +169,7 @@ pub struct AudioEngine {
     last_cpu: f32,
     rb_occupancy: Arc<AtomicUsize>,
     module_latency_samples: Arc<AtomicUsize>,
+    chain_state: Arc<Mutex<EngineState>>,
     last_cpu_update: Instant,
 }
 
@@ -181,7 +183,7 @@ impl AudioEngine {
             input_stream: None,
             output_stream: None,
             module_configs: Arc::new(Mutex::new(HashMap::new())),
-            config_tx: Arc::new(Mutex::new(None)),
+            command_tx: Arc::new(Mutex::new(None)),
             metrics: Arc::new(EngineMetrics::new()),
             sys,
             pid,
@@ -190,6 +192,11 @@ impl AudioEngine {
             last_cpu: 0.0,
             rb_occupancy: Arc::new(AtomicUsize::new(0)),
             module_latency_samples: Arc::new(AtomicUsize::new(0)),
+            chain_state: Arc::new(Mutex::new(EngineState {
+                modules: Vec::new(),
+                is_running: false,
+                sample_rate: 48000.0,
+            })),
             last_cpu_update: Instant::now(),
         }
     }
@@ -241,26 +248,35 @@ impl AudioEngine {
         }
     }
 
-    pub fn update_module_config(&self, config: ModuleConfig) {
-        let type_name = match &config {
-            ModuleConfig::Expander { .. } => "Expander",
-            ModuleConfig::RNNoise { .. } => "RNNoise",
-            ModuleConfig::Gain { .. } => "Gain",
-            ModuleConfig::Compressor { .. } => "Compressor",
-            ModuleConfig::Filter { .. } => "Filter",
-            ModuleConfig::FX { .. } => "FX",
-            _ => "Unknown",
-        };
-
-        if let Ok(mut configs) = self.module_configs.lock() {
-            configs.insert(type_name.to_string(), config.clone());
+    pub fn send_command(&self, command: EngineCommand) {
+        // Track state changes that should persist across engine restarts
+        match &command {
+            EngineCommand::UpdateConfig(config) => {
+                let type_name = match config {
+                    ModuleConfig::Expander { .. } => "Expander",
+                    ModuleConfig::RNNoise { .. } => "RNNoise",
+                    ModuleConfig::Gain { .. } => "Gain",
+                    ModuleConfig::Compressor { .. } => "Compressor",
+                    ModuleConfig::Filter { .. } => "Filter",
+                    ModuleConfig::FX { .. } => "FX",
+                    _ => "Unknown",
+                };
+                if let Ok(mut configs) = self.module_configs.lock() {
+                    configs.insert(type_name.to_string(), config.clone());
+                }
+            }
+            _ => {} // Other commands are transient for now
         }
 
-        if let Ok(tx_lock) = self.config_tx.lock() {
+        if let Ok(tx_lock) = self.command_tx.lock() {
             if let Some(tx) = tx_lock.as_ref() {
-                let _ = tx.send(config);
+                let _ = tx.send(command);
             }
         }
+    }
+
+    pub fn update_module_config(&self, config: ModuleConfig) {
+        self.send_command(EngineCommand::UpdateConfig(config));
     }
 
     pub fn get_input_devices(&self) -> Vec<String> {
@@ -276,6 +292,18 @@ impl AudioEngine {
         match host.output_devices() {
             Ok(devices) => devices.filter_map(|d| d.name().ok()).collect(),
             Err(_) => vec![],
+        }
+    }
+
+    pub fn get_engine_state(&self) -> EngineState {
+        if let Ok(state) = self.chain_state.lock() {
+            state.clone()
+        } else {
+            EngineState {
+                modules: Vec::new(),
+                is_running: false,
+                sample_rate: self.sample_rate,
+            }
         }
     }
 
@@ -305,17 +333,14 @@ impl AudioEngine {
         // We run at 48kHz if any module requires it (like RNNoise), otherwise output rate.
         let mut internal_sample_rate = self.sample_rate;
 
+        let mut chain = SignalChain::new(internal_sample_rate);
         use crate::core::modules::ModuleFactory;
 
-        let mut local_modules: Vec<Box<dyn AudioModule>> = Vec::new();
         for module_type in ModuleFactory::available_types() {
-            if let Some(module) = ModuleFactory::create(module_type, internal_sample_rate) {
-                log::info!("Initialized module: {} (ID: {}, Category: {:?})", module.name(), module.id(), module.category());
-                local_modules.push(module);
-            }
+            chain.add_module(module_type);
         }
 
-        for m in local_modules.iter() {
+        for m in chain.modules().iter() {
             if let (Some(req_rate), _) = m.requirements() {
                 if req_rate > internal_sample_rate {
                     internal_sample_rate = req_rate;
@@ -323,21 +348,17 @@ impl AudioEngine {
             }
         }
 
-        // Re-prepare modules with the final chosen internal rate
-        for m in local_modules.iter_mut() {
-            m.prepare(internal_sample_rate);
-        }
+        // Re-prepare chain with the final chosen internal rate
+        chain.set_sample_rate(internal_sample_rate);
 
         if let Ok(configs) = self.module_configs.lock() {
             for (_, config) in configs.iter() {
-                for module in local_modules.iter_mut() {
-                    module.update_config(config);
-                }
+                chain.update_config(config);
             }
         }
 
-        let (tx, rx) = unbounded::<ModuleConfig>();
-        if let Ok(mut tx_lock) = self.config_tx.lock() {
+        let (tx, rx) = unbounded::<EngineCommand>();
+        if let Ok(mut tx_lock) = self.command_tx.lock() {
             *tx_lock = Some(tx);
         }
 
@@ -347,8 +368,12 @@ impl AudioEngine {
         let rb_occ_out = self.rb_occupancy.clone();
         let mod_lat_atomic = self.module_latency_samples.clone();
 
-        let initial_lat: usize = local_modules.iter().map(|m| m.latency_samples()).sum();
+        let initial_lat = chain.latency_samples();
         mod_lat_atomic.store(initial_lat, Ordering::Relaxed);
+
+        if let Ok(mut state_lock) = self.chain_state.lock() {
+            *state_lock = chain.get_state(true);
+        }
 
         let rb = HeapRb::<f32>::new((self.sample_rate as usize * 2).max(4800 * 2));
         let (mut producer, mut consumer) = rb.split();
@@ -387,22 +412,48 @@ impl AudioEngine {
         let mut output_accumulator = Vec::with_capacity((out_sample_rate as f32 * 0.1) as usize);
         let mut resample_buf = vec![vec![0.0f32; 0]];
 
+        let chain_state_clone = self.chain_state.clone();
         let input_stream = input_device.build_input_stream(
             &input_config,
             move |data: &[f32], info: &cpal::InputCallbackInfo| {
                 let start_time = Instant::now();
 
-                let mut config_changed = false;
-                while let Ok(config) = rx.try_recv() {
-                    config_changed = true;
-                    for module in local_modules.iter_mut() {
-                        module.update_config(&config);
+                let mut chain_changed = false;
+                while let Ok(command) = rx.try_recv() {
+                    match command {
+                        EngineCommand::UpdateConfig(config) => {
+                            chain.update_config(&config);
+                            chain_changed = true; // Still want to update state even if just config
+                        }
+                        EngineCommand::AddModule { module_type } => {
+                            chain.add_module(&module_type);
+                            chain_changed = true;
+                        }
+                        EngineCommand::RemoveModule { id } => {
+                            chain.remove_module(&id);
+                            chain_changed = true;
+                        }
+                        EngineCommand::SetParam { id, param, value } => {
+                            chain.update_module_param(&id, &param, value);
+                            chain_changed = true;
+                        }
+                        EngineCommand::Reorder { order } => {
+                            chain.reorder(&order);
+                            chain_changed = true;
+                        }
+                        EngineCommand::MidiEvent(_midi) => {
+                            // TODO: Pass MIDI to modules
+                        }
                     }
                 }
 
-                if config_changed {
-                    let total_lat: usize = local_modules.iter().map(|m| m.latency_samples()).sum();
+                if chain_changed {
+                    let total_lat = chain.latency_samples();
                     mod_lat_atomic.store(total_lat, Ordering::Relaxed);
+                    // Update shared state
+                    if let Ok(mut state_lock) = chain_state_clone.try_lock() {
+                        *state_lock = chain.get_state(true);
+                    }
                 }
 
                 if let Some(diff) = info.timestamp().callback.duration_since(&info.timestamp().capture) {
@@ -433,9 +484,7 @@ impl AudioEngine {
                         working_chunk[i] = sample;
                     }
 
-                    for module in local_modules.iter_mut() {
-                        module.process(&mut working_chunk);
-                    }
+                    chain.process(&mut working_chunk);
 
                     visualizer.process(&working_chunk, internal_sample_rate, &metrics);
 
@@ -499,7 +548,7 @@ impl AudioEngine {
         if self.is_running() {
             self.input_stream = None;
             self.output_stream = None;
-            if let Ok(mut tx_lock) = self.config_tx.lock() {
+            if let Ok(mut tx_lock) = self.command_tx.lock() {
                 *tx_lock = None;
             }
             log::info!("Audio engine stopped");

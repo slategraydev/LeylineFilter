@@ -69,6 +69,12 @@ impl AudioModule for RNNoiseModule {
         }
     }
 
+    fn get_config(&self) -> ModuleConfig {
+        ModuleConfig::RNNoise {
+            enabled: self.enabled,
+        }
+    }
+
     fn process(&mut self, samples: &mut [f32]) {
         let current_mix = self.bypass_smoother.current();
 

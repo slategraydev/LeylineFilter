@@ -47,6 +47,13 @@ impl AudioModule for GainModule {
         }
     }
 
+    fn get_config(&self) -> ModuleConfig {
+        ModuleConfig::Gain {
+            enabled: self.enabled,
+            gain_db: 20.0 * self.gain.get_target().log10(),
+        }
+    }
+
     fn process(&mut self, samples: &mut [f32]) {
         if !self.enabled {
             return;
