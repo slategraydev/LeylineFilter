@@ -285,6 +285,27 @@ body {
     color: #999;
 }
 
+.control-group select {
+    background: var(--color-shadow);
+    color: var(--color-silver);
+    border: 1px solid var(--color-gunmetal);
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.control-group select:focus {
+    outline: none;
+    border-color: var(--color-mauve);
+}
+
+.control-group select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 input[type="range"] {
     width: 100%;
     accent-color: var(--color-mauve);

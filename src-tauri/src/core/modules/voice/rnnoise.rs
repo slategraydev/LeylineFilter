@@ -1,4 +1,4 @@
-use crate::core::traits::{AudioModule, ModuleConfig, ModuleCategory};
+use crate::core::traits::{AudioModule, ModuleCategory, ModuleConfig};
 use crate::utils::resampling::AudioBlockProcessor;
 use crate::utils::smoothing::ParameterSmoother;
 use nnnoiseless::DenoiseState;
@@ -47,7 +47,7 @@ impl AudioModule for RNNoiseModule {
     }
 
     fn latency_samples(&self) -> usize {
-        if !self.enabled && self.bypass_smoother.current() < 1e-4 {
+        if !self.enabled {
             return 0;
         }
         480
@@ -64,7 +64,8 @@ impl AudioModule for RNNoiseModule {
             if self.enabled != *enabled {
                 log::info!("RNNoise module toggled to: {}", enabled);
                 self.enabled = *enabled;
-                self.bypass_smoother.set_target(if self.enabled { 1.0 } else { 0.0 });
+                self.bypass_smoother
+                    .set_target(if self.enabled { 1.0 } else { 0.0 });
             }
         }
     }

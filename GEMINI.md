@@ -16,16 +16,19 @@ This project is a high-performance biometric audio gate built with Rust, Tauri v
 - **Modular DSP (Registry Pattern)**: All processing logic implements the `AudioModule` trait in `traits.rs`. 
     - Modules are organized into categories (`dynamics`, `voice`, `filter`, `fx`, `synth`, `utility`) in `src-tauri/src/core/modules/`.
     - The `ModuleFactory` in `modules/mod.rs` handles dynamic instantiation of modules.
+- **Visualizer Decoupling**: FFT analysis and metric reporting are handled by `VisualizerState` in `src-tauri/src/core/visualizer.rs`.
+    - Metric updates (spectrum, levels) are decoupled from latency reporting to prevent "flapping" or incorrect latency metrics during rapid visual updates.
 - **Async/Sync Boundary**: Tauri commands are `async` and run on the tokio runtime. The `AudioEngine` is managed as global state in `AppState`.
 - **Lifecycle & Cleanup**: The `AudioEngine` implements the `Drop` trait to ensure audio streams are released when the engine is destroyed. Additionally, the application explicitly stops the engine during the `RunEvent::Exit` event in `lib.rs` to guarantee a graceful shutdown and consistent logging.
 
 ## Engineering Standards
 - **Parameter Smoothing**: All audible parameter changes (threshold, ratio, bypass) must use the `ParameterSmoother` utility to prevent digital clicks and pops.
+- **Latency Reporting**: Latency is calculated based on the *internal* sample rate and module-specific lookahead. Disabled modules must report 0 latency immediately, ignoring internal fade-out states.
 - **Sample Rate Independence**: Modules are notified of the internal sample rate via `prepare()`. They should favor the engine-level resampling but must remain functional at any rate.
 - **Error Handling**: Use the custom `EngineError` enum in `error.rs` for all backend failures.
 - **Metrics**: 
-    - **CPU Usage**: Process-specific usage tracked via `sysinfo`.
-    - **Latency**: Comprehensive pipeline latency including hardware I/O, engine buffering (10ms chunks), and module-specific lookahead (e.g., 480 samples for RNNoise).
+    - **CPU Usage**: Process-specific usage tracked via `sysinfo` using efficient PID-based refreshing.
+    - **Latency**: Comprehensive pipeline latency including hardware I/O, engine buffering (10ms chunks), and module-specific lookahead.
 
 ## Security & Validation
 - **CSP**: Strict Content Security Policy in `tauri.conf.json`.
@@ -38,3 +41,4 @@ This project is a high-performance biometric audio gate built with Rust, Tauri v
 - `crossbeam-channel`: Lock-free MPMC channels for real-time safe communication.
 - `ringbuf`: Lock-free SPSC buffers for audio sample transfer.
 - `fundsp`: Functional DSP library for synth and effect composition.
+- `rustfft`: High-performance FFT library for visualization.

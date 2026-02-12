@@ -6,7 +6,7 @@ LeylineFilter is a high-performance, modular audio processing engine built with 
 
 - **Dynamic Signal Chain**: A modular processing chain that supports adding, removing, and reordering modules in real-time without interrupting the audio stream.
 - **Unified Engine Bus**: A centralized `EngineCommand` system for controlling all aspects of the engine through a single thread-safe message channel.
-- **State Synchronization**: Real-time state reporting that keeps the UI perfectly in sync with the internal engine state using snapshots and snapshots.
+- **State Synchronization**: Real-time state reporting that keeps the UI perfectly in sync with the internal engine state using snapshots.
 - **AI Noise Suppression**: Integration of **RNNoise**, using Gated Recurrent Units (GRU) to suppress non-stationary noise in real-time.
 - **Lock-Free Engine**: Strictly real-time safe audio thread using message passing via `crossbeam-channel` and lock-free ring buffers. No Mutex contention in the audio path.
 - **Synth-Ready DSP**: Integrated with **fundsp** for high-performance functional DSP composition, enabling complex synth voices and custom processing chains.
@@ -39,7 +39,8 @@ src-tauri/
 │   │   │   └── utility/   # Gain, AGC
 │   │   ├── audio.rs    # Main Lock-Free Audio Engine
 │   │   ├── chain.rs    # Dynamic Signal Chain management
-│   │   └── traits.rs   # AudioModule traits and config enums
+│   │   ├── traits.rs   # AudioModule traits and config enums
+│   │   └── visualizer.rs # Real-time FFT analysis
 │   ├── utils/          # Utilities (Resampling, Smoothing, Logger)
 │   ├── error.rs        # Serialization-ready error handling
 │   ├── lib.rs          # Tauri commands and state management

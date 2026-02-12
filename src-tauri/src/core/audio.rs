@@ -1,101 +1,18 @@
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-use crate::core::traits::{ModuleConfig, EngineCommand, EngineState};
 use crate::core::chain::SignalChain;
+use crate::core::traits::{EngineCommand, EngineState, ModuleConfig};
 use crate::error::{EngineError, Result as EngineResult};
-use rubato::{Resampler, FastFixedIn, PolynomialDegree};
-use std::time::Instant;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use crossbeam_channel::{unbounded, Sender};
+use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::HeapRb;
-use ringbuf::traits::{Producer, Consumer, Split, Observer};
-use sysinfo::System;
-use rustfft::{FftPlanner, Fft, num_complex::Complex};
-use crossbeam_channel::{Sender, unbounded};
+use rubato::{FastFixedIn, PolynomialDegree, Resampler};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+use sysinfo::System;
 
-/// Pre-allocated state for audio visualization to ensure real-time safety.
-struct VisualizerState {
-    fft: Arc<dyn Fft<f32>>,
-    fft_buffer: Vec<Complex<f32>>,
-    scratch_buffer: Vec<Complex<f32>>,
-}
-
-impl VisualizerState {
-    fn new(chunk_size: usize) -> Self {
-        let mut planner = FftPlanner::new();
-        let fft = planner.plan_fft_forward(chunk_size);
-        Self {
-            fft_buffer: vec![Complex::default(); chunk_size],
-            scratch_buffer: vec![Complex::default(); fft.get_inplace_scratch_len()],
-            fft,
-        }
-    }
-
-    fn process(&mut self, chunk: &[f32], sample_rate: f32, metrics: &EngineMetrics) {
-        for (i, &sample) in chunk.iter().enumerate() {
-            if i < self.fft_buffer.len() {
-                self.fft_buffer[i] = Complex { re: sample, im: 0.0 };
-            }
-        }
-
-        self.fft.process_with_scratch(&mut self.fft_buffer, &mut self.scratch_buffer);
-
-        let mut spectrum_bins = [0.0f32; 12];
-        let mut tonality_bins = [0.0f32; 12];
-        let num_bins = self.fft_buffer.len() / 2;
-
-        if num_bins > 0 {
-            let f_min = 80.0f32;
-            let f_max = 20000.0f32;
-            let bin_sz = sample_rate / chunk.len() as f32;
-
-            for i in 0..12 {
-                let freq_start = f_min * (f_max / f_min).powf(i as f32 / 12.0);
-                let freq_end = f_min * (f_max / f_min).powf((i + 1) as f32 / 12.0);
-
-                let start_bin = (freq_start / bin_sz).floor() as usize;
-                let end_bin = (freq_end / bin_sz).ceil() as usize;
-
-                let start_bin = start_bin.min(num_bins);
-                let end_bin = end_bin.max(start_bin + 1).min(num_bins);
-
-                let mut sum = 0.0f32;
-                let mut max_bin_val = 0.0f32;
-                let count = (end_bin - start_bin).max(1);
-
-                for b in start_bin..end_bin {
-                    let val = self.fft_buffer[b].norm();
-                    sum += val;
-                    if val > max_bin_val {
-                        max_bin_val = val;
-                    }
-                }
-
-                let avg = sum / count as f32;
-                let normalized_mag = avg / (num_bins as f32);
-                let db = 20.0 * normalized_mag.max(1e-6).log10();
-                let linear_val = ((db + 60.0) / 60.0).clamp(0.0, 1.0);
-                spectrum_bins[i] = linear_val.sqrt();
-
-                if avg > 1e-6 {
-                    let ratio = max_bin_val / avg;
-                    let threshold = (count as f32).sqrt().max(2.0);
-                    tonality_bins[i] = (ratio / (threshold * 1.5)).min(1.0);
-                }
-            }
-        }
-
-        let mut peak = 0.0f32;
-        for &sample in chunk {
-            let abs = sample.abs();
-            if abs > peak {
-                peak = abs;
-            }
-        }
-
-        metrics.update_processing_metrics(0.0, peak, &spectrum_bins, &tonality_bins);
-    }
-}
+use crate::core::visualizer::VisualizerState;
 
 pub struct StreamWrapper(#[allow(dead_code)] cpal::Stream);
 unsafe impl Send for StreamWrapper {}
@@ -111,7 +28,7 @@ pub struct EngineMetrics {
 }
 
 impl EngineMetrics {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             latency_ms: AtomicU32::new(0),
             input_latency_ms: AtomicU32::new(0),
@@ -123,8 +40,12 @@ impl EngineMetrics {
         }
     }
 
-    fn update_processing_metrics(&self, processing_ms: f32, level: f32, bins: &[f32; 12], tonality: &[f32; 12]) {
-        self.latency_ms.store(processing_ms.to_bits(), Ordering::Relaxed);
+    fn update_latency(&self, processing_ms: f32) {
+        self.latency_ms
+            .store(processing_ms.to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn update_visualizer_metrics(&self, level: f32, bins: &[f32; 12], tonality: &[f32; 12]) {
         self.input_level.store(level.to_bits(), Ordering::Relaxed);
         for i in 0..12 {
             self.spectrum[i].store(bins[i].to_bits(), Ordering::Relaxed);
@@ -165,6 +86,7 @@ pub struct AudioEngine {
     sys: System,
     pid: sysinfo::Pid,
     sample_rate: f32,
+    internal_sample_rate: f32,
     last_latency: f32,
     last_cpu: f32,
     rb_occupancy: Arc<AtomicUsize>,
@@ -188,6 +110,7 @@ impl AudioEngine {
             sys,
             pid,
             sample_rate: 48000.0,
+            internal_sample_rate: 48000.0,
             last_latency: 0.0,
             last_cpu: 0.0,
             rb_occupancy: Arc::new(AtomicUsize::new(0)),
@@ -211,15 +134,24 @@ impl AudioEngine {
         }
 
         let processing_ms = f32::from_bits(self.metrics.latency_ms.load(Ordering::Relaxed));
-        let chunk_size = (self.sample_rate * 0.01) as usize;
-        let chunk_latency_ms = (chunk_size as f32 / self.sample_rate) * 1000.0;
+
+        // Chunk size is based on internal sample rate (10ms of internal rate)
+        let chunk_size = (self.internal_sample_rate * 0.01) as usize;
+        // This is exactly 10ms by definition, but calculation confirms it
+        let chunk_latency_ms = (chunk_size as f32 / self.internal_sample_rate) * 1000.0;
+
+        // Ring buffer contains output samples
         let rb_samples = self.rb_occupancy.load(Ordering::Relaxed);
         let rb_latency_ms = (rb_samples as f32 / self.sample_rate) * 1000.0;
+
+        // Modules operate at internal sample rate
         let mod_samples = self.module_latency_samples.load(Ordering::Relaxed);
-        let mod_latency_ms = (mod_samples as f32 / self.sample_rate) * 1000.0;
+        let mod_latency_ms = (mod_samples as f32 / self.internal_sample_rate) * 1000.0;
+
         let (in_lat, out_lat) = self.metrics.get_hardware_latencies();
 
-        let current_latency = processing_ms + chunk_latency_ms + rb_latency_ms + mod_latency_ms + in_lat + out_lat;
+        let current_latency =
+            processing_ms + chunk_latency_ms + rb_latency_ms + mod_latency_ms + in_lat + out_lat;
 
         if self.last_latency == 0.0 {
             self.last_latency = current_latency;
@@ -235,13 +167,17 @@ impl AudioEngine {
             return self.last_cpu;
         }
 
-        self.sys.refresh_all();
+        // Refresh only our own process
+        self.sys
+            .refresh_processes(sysinfo::ProcessesToUpdate::Some(&[self.pid]), true);
         self.last_cpu_update = Instant::now();
 
         if let Some(process) = self.sys.process(self.pid) {
             let raw_cpu = process.cpu_usage() / self.sys.cpus().len() as f32;
             self.last_cpu = self.last_cpu * 0.9 + raw_cpu * 0.1;
-            self.metrics.cpu_usage.store(self.last_cpu.to_bits(), Ordering::Relaxed);
+            self.metrics
+                .cpu_usage
+                .store(self.last_cpu.to_bits(), Ordering::Relaxed);
             self.last_cpu
         } else {
             0.0
@@ -307,18 +243,36 @@ impl AudioEngine {
         }
     }
 
-    pub fn start(&mut self, input_device_name: Option<String>, output_device_name: Option<String>) -> EngineResult<()> {
+    pub fn start(
+        &mut self,
+        input_device_name: Option<String>,
+        output_device_name: Option<String>,
+    ) -> EngineResult<()> {
         let host = cpal::default_host();
 
         let input_device = if let Some(name) = input_device_name {
-            if name == "Default" { host.default_input_device() }
-            else { host.input_devices()?.find(|d| d.name().ok().as_ref() == Some(&name)) }
-        } else { host.default_input_device() }.ok_or_else(|| EngineError::DeviceError("Input device not found".to_string()))?;
+            if name == "Default" {
+                host.default_input_device()
+            } else {
+                host.input_devices()?
+                    .find(|d| d.name().ok().as_ref() == Some(&name))
+            }
+        } else {
+            host.default_input_device()
+        }
+        .ok_or_else(|| EngineError::DeviceError("Input device not found".to_string()))?;
 
         let output_device = if let Some(name) = output_device_name {
-            if name == "Default" { host.default_output_device() }
-            else { host.output_devices()?.find(|d| d.name().ok().as_ref() == Some(&name)) }
-        } else { host.default_output_device() }.ok_or_else(|| EngineError::DeviceError("Output device not found".to_string()))?;
+            if name == "Default" {
+                host.default_output_device()
+            } else {
+                host.output_devices()?
+                    .find(|d| d.name().ok().as_ref() == Some(&name))
+            }
+        } else {
+            host.default_output_device()
+        }
+        .ok_or_else(|| EngineError::DeviceError("Output device not found".to_string()))?;
 
         let input_config: cpal::StreamConfig = input_device.default_input_config()?.into();
         let output_config: cpal::StreamConfig = output_device.default_output_config()?.into();
@@ -347,6 +301,8 @@ impl AudioEngine {
                 }
             }
         }
+
+        self.internal_sample_rate = internal_sample_rate;
 
         // Re-prepare chain with the final chosen internal rate
         chain.set_sample_rate(internal_sample_rate);
@@ -380,26 +336,32 @@ impl AudioEngine {
 
         // Engine-level Resampler In: Input -> Internal
         let mut resampler_in = if (in_sample_rate - internal_sample_rate as f64).abs() > 1.0 {
-            Some(FastFixedIn::<f32>::new(
-                internal_sample_rate as f64 / in_sample_rate,
-                2.0,
-                PolynomialDegree::Cubic,
-                (internal_sample_rate * 0.01) as usize,
-                1,
-            ).map_err(|e| EngineError::ResamplerError(e.to_string()))?)
+            Some(
+                FastFixedIn::<f32>::new(
+                    internal_sample_rate as f64 / in_sample_rate,
+                    2.0,
+                    PolynomialDegree::Cubic,
+                    (internal_sample_rate * 0.01) as usize,
+                    1,
+                )
+                .map_err(|e| EngineError::ResamplerError(e.to_string()))?,
+            )
         } else {
             None
         };
 
         // Engine-level Resampler Out: Internal -> Output
         let mut resampler_out = if (internal_sample_rate as f64 - out_sample_rate).abs() > 1.0 {
-            Some(FastFixedIn::<f32>::new(
-                out_sample_rate / internal_sample_rate as f64,
-                2.0,
-                PolynomialDegree::Cubic,
-                (internal_sample_rate * 0.01) as usize,
-                1,
-            ).map_err(|e| EngineError::ResamplerError(e.to_string()))?)
+            Some(
+                FastFixedIn::<f32>::new(
+                    out_sample_rate / internal_sample_rate as f64,
+                    2.0,
+                    PolynomialDegree::Cubic,
+                    (internal_sample_rate * 0.01) as usize,
+                    1,
+                )
+                .map_err(|e| EngineError::ResamplerError(e.to_string()))?,
+            )
         } else {
             None
         };
@@ -456,8 +418,14 @@ impl AudioEngine {
                     }
                 }
 
-                if let Some(diff) = info.timestamp().callback.duration_since(&info.timestamp().capture) {
-                    metrics.input_latency_ms.store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
+                if let Some(diff) = info
+                    .timestamp()
+                    .callback
+                    .duration_since(&info.timestamp().capture)
+                {
+                    metrics
+                        .input_latency_ms
+                        .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
                 }
 
                 for frame in data.chunks(in_channels) {
@@ -480,7 +448,10 @@ impl AudioEngine {
 
                 // Process in chunks at internal rate
                 while internal_accumulator.len() >= internal_chunk_size {
-                    for (i, sample) in internal_accumulator.drain(..internal_chunk_size).enumerate() {
+                    for (i, sample) in internal_accumulator
+                        .drain(..internal_chunk_size)
+                        .enumerate()
+                    {
                         working_chunk[i] = sample;
                     }
 
@@ -505,18 +476,24 @@ impl AudioEngine {
 
                     rb_occ_in.store(producer.occupied_len(), Ordering::Relaxed);
                     let elapsed = start_time.elapsed().as_secs_f32() * 1000.0;
-                    metrics.latency_ms.store(elapsed.to_bits(), Ordering::Relaxed);
+                    metrics.update_latency(elapsed);
                 }
             },
             |err| log::error!("Input stream error: {}", err),
-            None
+            None,
         )?;
 
         let output_stream = output_device.build_output_stream(
             &output_config,
             move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
-                if let Some(diff) = info.timestamp().playback.duration_since(&info.timestamp().callback) {
-                    metrics_out.output_latency_ms.store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
+                if let Some(diff) = info
+                    .timestamp()
+                    .playback
+                    .duration_since(&info.timestamp().callback)
+                {
+                    metrics_out
+                        .output_latency_ms
+                        .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
                 }
 
                 let out_channels = output_config.channels as usize;
@@ -531,7 +508,7 @@ impl AudioEngine {
                 rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
             },
             |err| log::error!("Output stream error: {}", err),
-            None
+            None,
         )?;
 
         input_stream.play()?;
@@ -540,7 +517,10 @@ impl AudioEngine {
         self.input_stream = Some(StreamWrapper(input_stream));
         self.output_stream = Some(StreamWrapper(output_stream));
 
-        log::info!("Audio engine started successfully (Internal Rate: {}Hz)", internal_sample_rate);
+        log::info!(
+            "Audio engine started successfully (Internal Rate: {}Hz)",
+            internal_sample_rate
+        );
         Ok(())
     }
 
@@ -551,6 +531,12 @@ impl AudioEngine {
             if let Ok(mut tx_lock) = self.command_tx.lock() {
                 *tx_lock = None;
             }
+
+            // Update chain state to reflect stopped status
+            if let Ok(mut state_lock) = self.chain_state.lock() {
+                state_lock.is_running = false;
+            }
+
             log::info!("Audio engine stopped");
         }
     }
