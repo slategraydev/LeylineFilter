@@ -33,7 +33,6 @@ pub enum ModuleConfig {
         makeup_gain_db: f32,
     },
     /// Configuration for a Filter module (HPF/LPF).
-    #[allow(dead_code)]
     Filter {
         enabled: bool,
         filter_type: String,
@@ -56,7 +55,6 @@ pub enum ModuleConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModuleCategory {
     Dynamics,
-    #[allow(dead_code)]
     Filter,
     Voice,
     #[allow(dead_code)]

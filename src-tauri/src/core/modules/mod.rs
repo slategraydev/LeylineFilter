@@ -9,6 +9,7 @@ use crate::core::traits::{AudioModule};
 use crate::core::modules::dynamics::expander::ExpanderModule;
 use crate::core::modules::voice::rnnoise::RNNoiseModule;
 use crate::core::modules::utility::gain::GainModule;
+use crate::core::modules::filter::biquad::BiquadModule;
 
 /// A factory for creating audio modules by type.
 pub struct ModuleFactory;
@@ -20,13 +21,14 @@ impl ModuleFactory {
             "Gain" => Some(Box::new(GainModule::new(sample_rate))),
             "Expander" => Some(Box::new(ExpanderModule::new(sample_rate))),
             "RNNoise" => Some(Box::new(RNNoiseModule::new(sample_rate))),
+            "Filter" => Some(Box::new(BiquadModule::new(sample_rate))),
             _ => None,
         }
     }
 
     /// Returns a list of all available module types.
     pub fn available_types() -> Vec<&'static str> {
-        vec!["Gain", "Expander", "RNNoise"]
+        vec!["Gain", "Expander", "RNNoise", "Filter"]
     }
 }
 
@@ -48,6 +50,10 @@ mod tests {
         assert!(rnnoise.is_some());
         assert_eq!(rnnoise.unwrap().name(), "RNNoise");
 
+        let filter = ModuleFactory::create("Filter", 48000.0);
+        assert!(filter.is_some());
+        assert_eq!(filter.unwrap().name(), "Filter");
+
         let unknown = ModuleFactory::create("Unknown", 48000.0);
         assert!(unknown.is_none());
     }
@@ -58,5 +64,6 @@ mod tests {
         assert!(types.contains(&"Gain"));
         assert!(types.contains(&"Expander"));
         assert!(types.contains(&"RNNoise"));
+        assert!(types.contains(&"Filter"));
     }
 }

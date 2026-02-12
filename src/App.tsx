@@ -4,9 +4,15 @@ import { useEngine } from "./hooks/useEngine";
 import { ExpanderModule } from "./components/Modules/ExpanderModule";
 import { RNNoiseModule } from "./components/Modules/RNNoiseModule";
 import { GainModule } from "./components/Modules/GainModule";
+import { FilterModule } from "./components/Modules/FilterModule";
 import { EngineControls } from "./components/Engine/EngineControls";
 import { Visualizer } from "./components/Visualizer/Visualizer";
-import { ExpanderConfig, RNNoiseConfig, GainConfig } from "./types";
+import {
+  ExpanderConfig,
+  RNNoiseConfig,
+  GainConfig,
+  FilterConfig,
+} from "./types";
 import "./App.css";
 
 function App() {
@@ -71,6 +77,25 @@ function App() {
     return defaults;
   });
 
+  const [filterConfig, setFilterConfig] = useState<FilterConfig>(() => {
+    const defaults: FilterConfig = {
+      enabled: false,
+      filter_type: "LPF",
+      frequency: 1000,
+      q: 0.707,
+    };
+
+    const saved = localStorage.getItem("filter_config");
+    if (saved) {
+      try {
+        return { ...defaults, ...JSON.parse(saved) };
+      } catch (e) {
+        console.error("Failed to parse saved config", e);
+      }
+    }
+    return defaults;
+  });
+
   useEffect(() => {
     localStorage.setItem("gain_config", JSON.stringify(gainConfig));
     invoke("update_config", {
@@ -100,6 +125,16 @@ function App() {
       },
     });
   }, [rnnoiseConfig]);
+
+  useEffect(() => {
+    localStorage.setItem("filter_config", JSON.stringify(filterConfig));
+    invoke("update_config", {
+      config: {
+        type: "Filter",
+        data: filterConfig,
+      },
+    });
+  }, [filterConfig]);
 
   const toggleEngine = () => {
     if (isRunning) {
@@ -155,6 +190,7 @@ function App() {
         <GainModule config={gainConfig} onChange={setGainConfig} />
         <RNNoiseModule config={rnnoiseConfig} onChange={setRnnoiseConfig} />
         <ExpanderModule config={expanderConfig} onChange={setExpanderConfig} />
+        <FilterModule config={filterConfig} onChange={setFilterConfig} />
 
         {/* Placeholder for future modules */}
         <div className="module-card placeholder">
