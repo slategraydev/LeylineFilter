@@ -167,7 +167,7 @@ function App() {
         <div className="metrics-panel">
           <div className="metric">
             <label>Latency</label>
-            <span>
+            <span data-testid="latency-value">
               {`${Math.round(metrics.latency_ms)} ms`}
             </span>
           </div>
