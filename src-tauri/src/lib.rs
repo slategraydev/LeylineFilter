@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
 mod core;
 mod error;
 mod utils;
@@ -9,8 +11,15 @@ use std::sync::{Arc, Mutex};
 use tauri::{Manager, State};
 
 /// Global application state.
+///
+/// # Tauri Integration Pattern
+/// The `AppState` struct holds a thread-safe reference to the `AudioEngine`.
+/// Since Tauri commands are async and run on the Tokio runtime, we wrap the engine
+/// in an `Arc<Mutex<>>` to allow shared access across commands.
+///
+/// **Note:** The Audio Thread (internal to `AudioEngine`) does NOT lock this Mutex during processing.
+/// It uses its own lock-free communication channels.
 pub struct AppState {
-    /// The core audio engine, protected by a Mutex for thread-safe access from Tauri commands.
     pub engine: Arc<Mutex<AudioEngine>>,
 }
 
@@ -98,6 +107,9 @@ pub struct Metrics {
 }
 
 impl Metrics {
+    /// # Metrics Formatting Logic
+    /// Extracted for testability.
+    /// This allows us to unit test the data transformation without initializing the full Tauri runtime.
     pub fn from_engine(engine: &mut AudioEngine) -> Self {
         let is_running = engine.is_running();
         let (_, cpu, level, spectrum, tonality, version) = engine.metrics.get();

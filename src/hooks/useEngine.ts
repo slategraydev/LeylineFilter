@@ -1,7 +1,14 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { EngineMetrics, EngineState } from "../types";
 
+/**
+ * # Engine Hook
+ * The primary orchestration hook for the frontend.
+ * It manages the connection to the Rust backend via Tauri commands.
+ */
 export function useEngine() {
   const [isRunning, setIsRunning] = useState(false);
   const [inputDevices, setInputDevices] = useState<string[]>([]);
@@ -19,6 +26,7 @@ export function useEngine() {
   const [lastVersion, setLastVersion] = useState<number>(0);
 
   useEffect(() => {
+    // --- Initialization ---
     invoke<string[]>("get_input_devices").then((d) =>
       setInputDevices(["Default", ...d]),
     );
@@ -32,12 +40,22 @@ export function useEngine() {
       setIsRunning(state.is_running);
     });
 
+    /**
+     * ## High-Frequency Polling
+     * We poll metrics every 33ms (~30fps) instead of using events.
+     * Events would flood the IPC channel and cause backpressure on the audio thread.
+     * Polling lets the UI dictate the update rate.
+     */
     const interval = setInterval(async () => {
       try {
         const m = await invoke<EngineMetrics & { state_version: number }>("get_metrics");
         setMetrics(m);
 
-        // Sync full state only if version changed
+        /**
+         * ## Efficient State Sync
+         * We only fetch the full EngineState (which can be large) if the backend
+         * reports a version change (e.g., a module was added or removed).
+         */
         if (m.state_version !== lastVersion) {
           const state = await invoke<EngineState>("get_engine_state");
           setEngineState(state);
@@ -45,7 +63,7 @@ export function useEngine() {
           setLastVersion(m.state_version);
         }
       } catch (e) {
-        // Silently fail if backend not ready
+        // Silently fail if backend not ready (e.g. app closing)
       }
     }, 33);
     return () => clearInterval(interval);

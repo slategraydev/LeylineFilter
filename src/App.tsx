@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useEngine } from "./hooks/useEngine";
@@ -15,6 +17,12 @@ import {
 } from "./types";
 import "./App.css";
 
+/**
+ * # Main Application Component
+ * This component serves as the root state container for the UI.
+ * It manages the local configuration state (persistence via localStorage)
+ * and synchronizes with the backend via the useEngine hook.
+ */
 function App() {
   const {
     isRunning,
@@ -28,6 +36,11 @@ function App() {
   const [selectedInput, setSelectedInput] = useState<string>("Default");
   const [selectedOutput, setSelectedOutput] = useState<string>("Default");
 
+  /**
+   * ## Local State & Persistence
+   * Configuration is stored locally in React state for immediate UI responsiveness
+   * and synced to the backend via useEffect hooks.
+   */
   const [gainConfig, setGainConfig] = useState<GainConfig>(() => {
     const defaults = { enabled: true, gain_db: 0.0 };
     const saved = localStorage.getItem("gain_config");
@@ -96,6 +109,11 @@ function App() {
     return defaults;
   });
 
+  /**
+   * ## Config Synchronization
+   * We sync to the backend whenever config changes.
+   * Note: The backend handles parameter smoothing, so rapid updates are safe.
+   */
   useEffect(() => {
     localStorage.setItem("gain_config", JSON.stringify(gainConfig));
     invoke("update_config", {

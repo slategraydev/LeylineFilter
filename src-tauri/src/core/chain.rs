@@ -1,6 +1,17 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
 use crate::core::traits::{AudioModule, EngineState, ModuleConfig, ModuleInfo};
 
 /// Manages the sequence of audio modules and their processing order.
+///
+/// # Signal Chain Architecture
+/// The Signal Chain uses dynamic dispatch (`Box<dyn AudioModule>`) to support a flexible,
+/// runtime-configurable graph. While dynamic dispatch has a small overhead, it is necessary
+/// for the "plugin" style architecture where modules can be added/removed at will.
+///
+/// ## Performance Optimization
+/// - Modules are stored in a pre-allocated `Vec` to minimize cache misses.
+/// - The `process` loop is tight and allocation-free.
 pub struct SignalChain {
     modules: Vec<Box<dyn AudioModule>>,
     sample_rate: f32,
@@ -9,13 +20,14 @@ pub struct SignalChain {
 impl SignalChain {
     pub fn new(sample_rate: f32) -> Self {
         Self {
-            modules: Vec::with_capacity(32),
+            modules: Vec::with_capacity(32), // Pre-allocate for typical max chain size
             sample_rate,
         }
     }
 
     pub fn set_sample_rate(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
+        // Notify all modules of the new rate so they can recalculate coefficients
         for module in self.modules.iter_mut() {
             module.prepare(sample_rate);
         }
@@ -54,6 +66,9 @@ impl SignalChain {
         }
     }
 
+    /// # Core Processing Loop
+    /// This method is called thousands of times per second.
+    /// It must remain Allocation-Free and Panic-Free.
     pub fn process(&mut self, audio: &mut [f32]) {
         for module in self.modules.iter_mut() {
             module.process(audio);

@@ -1,17 +1,24 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
 pub mod dynamics;
-pub mod voice;
 pub mod filter;
 pub mod fx;
 pub mod synth;
 pub mod utility;
+pub mod voice;
 
-use crate::core::traits::{AudioModule};
 use crate::core::modules::dynamics::expander::ExpanderModule;
-use crate::core::modules::voice::rnnoise::RNNoiseModule;
-use crate::core::modules::utility::gain::GainModule;
 use crate::core::modules::filter::biquad::BiquadModule;
+use crate::core::modules::utility::gain::GainModule;
+use crate::core::modules::voice::rnnoise::RNNoiseModule;
+use crate::core::traits::AudioModule;
 
 /// A factory for creating audio modules by type.
+///
+/// # Registry Pattern
+/// This central registry allows the Engine to instantiate modules dynamically
+/// via string identifiers (e.g., from a JSON config or UI selection).
+/// It decouples the core engine loop from specific module implementations.
 pub struct ModuleFactory;
 
 impl ModuleFactory {

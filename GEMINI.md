@@ -1,6 +1,6 @@
 # LeylineFilter: Project Mandates & Architecture
 
-This project is a high-performance biometric audio gate built with Rust, Tauri v2, and CPAL.
+This project is a high-performance neural audio gate built with Rust, Tauri v2, and CPAL.
 
 ## Core Architecture
 - **Real-Time Safety (Lock-Free)**: The audio thread (inside `src-tauri/src/core/audio.rs`) is strictly **lock-free**. 
@@ -32,6 +32,16 @@ This project is a high-performance biometric audio gate built with Rust, Tauri v
 - **Metrics**: 
     - **CPU Usage**: Process-specific usage tracked via `sysinfo` using efficient PID-based refreshing.
     - **Latency**: Comprehensive pipeline latency including hardware I/O, engine buffering (10ms chunks), and module-specific lookahead.
+
+## Testing Standards
+- **Frontend UI**:
+    - All Module components (`FilterModule`, `GainModule`, etc.) must have unit tests verifying prop updates and rendering.
+    - Complex hooks (like `useEngine`) must be tested using `vitest` and mocked Tauri invokes.
+    - **Accessibility**: Ensure form controls are properly labelled (e.g., nesting `<select>` inside `<label>`) to allow `getByLabelText` queries to work.
+- **Backend Core**:
+    - DSP modules must include inline `#[test]` modules verifying algorithms and state transitions.
+- **Tauri Commands**:
+    - **Separation of Concerns**: Logic inside Tauri commands that transforms data (e.g., metric formatting) must be extracted into testable static methods (e.g., `Metrics::from_engine`) to avoid dependency on the `tauri::State` runtime.
 
 ## Security & Validation
 - **CSP**: Strict Content Security Policy in `tauri.conf.json`.

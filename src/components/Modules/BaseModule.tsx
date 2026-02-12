@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
 import React from 'react';
 import './BaseModule.css';
 
@@ -8,6 +10,10 @@ interface BaseModuleProps {
   children: React.ReactNode;
 }
 
+/**
+ * # Component Wrapper
+ * Provides consistent styling and the enable/disable toggle for all audio modules.
+ */
 export function BaseModule({ title, enabled, onToggle, children }: BaseModuleProps) {
   return (
     <div className={`module-card ${enabled ? 'active' : 'inactive'}`}>

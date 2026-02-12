@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
 use crate::core::chain::SignalChain;
 use crate::core::modules::ModuleFactory;
 use crate::core::traits::{AudioModule, EngineCommand, EngineState, ModuleConfig};
@@ -15,8 +17,10 @@ use sysinfo::System;
 
 use crate::core::visualizer::VisualizerState;
 
-// Internal command enum that supports holding Box<dyn AudioModule>
-// This is NOT serializable and is used only between AudioEngine and the Audio Thread.
+/// # Internal Command Architecture
+/// We use a separate internal command enum to handle non-serializable types like `Box<dyn AudioModule>`.
+/// This creates a clear boundary between the serializable public API (`EngineCommand`) and
+/// the internal thread-safe message passing.
 pub enum InternalEngineCommand {
     UpdateConfig(ModuleConfig),
     AddModule(Box<dyn AudioModule>),
@@ -34,6 +38,10 @@ pub enum InternalEngineCommand {
 pub struct StreamWrapper(#[allow(dead_code)] cpal::Stream);
 unsafe impl Send for StreamWrapper {}
 
+/// # Lock-Free Metrics
+/// Atomic metrics allow the UI to poll the engine state without ever locking the audio thread.
+///
+/// We use relaxed ordering because slight stale-ness (microsecond scale) is acceptable for UI visualization.
 pub struct EngineMetrics {
     pub latency_ms: AtomicU32,
     pub input_latency_ms: AtomicU32,
@@ -97,6 +105,12 @@ impl EngineMetrics {
     }
 }
 
+/// # The Audio Engine
+/// The central coordinator. It owns the CPAL streams and orchestrates the signal chain.
+///
+/// ## Key Design Principle
+/// The Main Thread controls the Engine, but the Audio Thread (inside the stream callback)
+/// runs autonomously. We use `crossbeam-channel` to bridge these worlds lock-free.
 pub struct AudioEngine {
     input_stream: Option<StreamWrapper>,
     output_stream: Option<StreamWrapper>,
@@ -293,6 +307,10 @@ impl AudioEngine {
         }
     }
 
+    /// # Garbage Collection
+    /// Critical for Audio Safety: Memory deallocation (`Drop`) is non-deterministic and can block.
+    /// The Audio Thread sends dropped modules to a channel, and this method (running on Main Thread)
+    /// processes the actual deallocation safely.
     pub fn process_garbage(&self) {
         if let Some(rx) = &self.garbage_rx {
             // Drain the channel and drop modules on this thread (Main Thread)
@@ -343,6 +361,7 @@ impl AudioEngine {
         self.sample_rate = out_sample_rate as f32;
 
         // Internal processing sample rate setup
+        // We normalize processing to a single rate (usually 48kHz, or highest requirement) to simplify DSP
         let mut internal_sample_rate = self.sample_rate;
         let mut chain = SignalChain::new(internal_sample_rate);
 
@@ -409,6 +428,9 @@ impl AudioEngine {
         let vis_metrics = self.metrics.clone();
         let vis_rate = internal_sample_rate;
 
+        // --- Visualizer Thread ---
+        // Decoupled from audio thread to prevent lock contention.
+        // It consumes a copy of the signal for FFT analysis.
         self.vis_thread = Some(std::thread::spawn(move || {
             let vis_chunk_size = 2048;
             let mut visualizer = VisualizerState::new(vis_chunk_size);
@@ -468,12 +490,15 @@ impl AudioEngine {
 
         let chain_state_clone = self.chain_state.clone();
 
-        // --- INPUT STREAM ---
+        // --- INPUT STREAM (Audio Thread) ---
+        // This closure runs on the high-priority audio thread.
+        // MALLOC/FREE FORBIDDEN. LOCKING FORBIDDEN.
         let input_stream = input_device.build_input_stream(
             &input_config,
             move |data: &[f32], info: &cpal::InputCallbackInfo| {
                 let start_time = Instant::now();
 
+                // 1. Process Command Queue (Lock-Free)
                 let mut chain_changed = false;
                 while let Ok(command) = rx.try_recv() {
                     match command {
@@ -488,6 +513,7 @@ impl AudioEngine {
                         }
                         InternalEngineCommand::RemoveModule(id) => {
                             if let Some(module) = chain.remove_module(&id) {
+                                // Send back to main thread for dropping
                                 let _ = garbage_tx.send(module);
                             }
                             chain_changed = true;
@@ -507,6 +533,7 @@ impl AudioEngine {
                 if chain_changed {
                     let total_lat = chain.latency_samples();
                     mod_lat_atomic.store(total_lat, Ordering::Relaxed);
+                    // Try-lock for UI sync (best effort)
                     if let Ok(mut state_lock) = chain_state_clone.try_lock() {
                         *state_lock = chain.get_state(true);
                         metrics.state_version.fetch_add(1, Ordering::Relaxed);
@@ -527,7 +554,7 @@ impl AudioEngine {
                     input_accumulator.push(frame[0]);
                 }
 
-                // Resample In
+                // 2. Resample In
                 if let Some(ref mut rs) = resampler_in {
                     while input_accumulator.len() >= rs.input_frames_next() {
                         let len = rs.input_frames_next();
@@ -541,7 +568,7 @@ impl AudioEngine {
                     input_accumulator.clear();
                 }
 
-                // Process in chunks at internal rate
+                // 3. Process in Chunks
                 while internal_accumulator.len() >= internal_chunk_size {
                     for (i, sample) in internal_accumulator
                         .drain(..internal_chunk_size)
@@ -550,12 +577,13 @@ impl AudioEngine {
                         working_chunk[i] = sample;
                     }
 
+                    // --- THE CORE DSP CHAIN ---
                     chain.process(&mut working_chunk);
 
                     // Send to visualizer thread (non-blocking push)
                     vis_prod.push_slice(&working_chunk);
 
-                    // Resample Out
+                    // 4. Resample Out
                     if let Some(ref mut rs) = resampler_out {
                         resample_buf[0].clear();
                         resample_buf[0].extend_from_slice(&working_chunk);

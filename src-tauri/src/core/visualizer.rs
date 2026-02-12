@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
 use crate::core::audio::EngineMetrics;
 use rustfft::{num_complex::Complex, Fft, FftPlanner};
 use std::sync::Arc;
@@ -8,6 +10,12 @@ struct BinRange {
 }
 
 /// Pre-allocated state for audio visualization to ensure real-time safety.
+///
+/// # Visualizer Strategy
+/// We reuse the `FftPlanner` and pre-allocated scratch buffers to avoid
+/// repeated allocations during the render loop.
+/// The `BinRange` array caches the mapping from FFT bins to the 12 display bars
+/// (logarithmic scale) so we don't recalculate `powf` every frame.
 pub struct VisualizerState {
     fft: Arc<dyn Fft<f32>>,
     fft_buffer: Vec<Complex<f32>>,

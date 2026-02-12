@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
 interface VisualizerProps {
   isRunning: boolean;
   spectrum: number[];
@@ -36,6 +38,14 @@ function LeylineLogo() {
   );
 }
 
+/**
+ * # CSS-Driven Visualizer
+ * We use CSS transitions on simple DOM elements for visualization instead of Canvas/WebGL.
+ *
+ * ## Why?
+ * For a simple 12-band analyzer, DOM manipulation is performant enough and
+ * much easier to style/responsively layout than a fixed-size canvas.
+ */
 export function Visualizer({ isRunning, spectrum, tonality }: VisualizerProps) {
   const bars = [...Array(12)].map((_, i) => {
     const binValue = spectrum[i] || 0;

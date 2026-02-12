@@ -1,6 +1,6 @@
 # LeylineFilter
 
-LeylineFilter is a high-performance, modular audio processing engine built with Rust and Tauri. It provides real-time noise suppression and biometric sound gating with professional-grade stability and audio quality.
+LeylineFilter is a high-performance, modular audio processing engine built with Rust and Tauri. It provides real-time noise suppression and neural sound gating with professional-grade stability and audio quality.
 
 ## Features
 
@@ -24,6 +24,7 @@ LeylineFilter is a high-performance, modular audio processing engine built with 
 - **Audio I/O**: [CPAL](https://github.com/RustAudio/cpal)
 - **Noise Suppression**: [nnnoiseless](https://github.com/shrit/nnnoiseless) (RNNoise)
 - **DSP/Resampling**: [Rubato](https://github.com/HesselM/rubato)
+- **Testing**: [Vitest](https://vitest.dev/) (Frontend) & `cargo test` (Backend)
 
 ## Project Structure
 
@@ -54,6 +55,7 @@ src-tauri/
 1. Install [Rust](https://www.rust-lang.org/tools/install) and [Node.js](https://nodejs.org/).
 2. Install frontend dependencies: `npm install`
 3. Run in development: `npm run tauri dev`
+4. Run tests: `npm test` or `cd src-tauri && cargo test`
 
 ## License
 
