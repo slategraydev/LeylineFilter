@@ -6,6 +6,7 @@ This project is a high-performance biometric audio gate built with Rust, Tauri v
 - **Real-Time Safety**: The audio thread (inside `src-tauri/src/core/audio.rs`) **must never block**. Do not use standard `Mutex` or `RwLock` for data transfer; use the implemented `ringbuf` (lock-free) or atomic operations.
 - **Modular DSP**: All processing logic must implement the `AudioModule` trait in `traits.rs`.
 - **Async/Sync Boundary**: Tauri commands are `async` and run on the tokio runtime. The `AudioEngine` state is wrapped in a `Mutex` in `AppState` for safe access from these commands.
+- **Lifecycle & Cleanup**: The `AudioEngine` implements the `Drop` trait to ensure audio streams are released when the engine is destroyed. Additionally, the application explicitly stops the engine during the `RunEvent::Exit` event in `lib.rs` to guarantee a graceful shutdown and consistent logging.
 
 ## Engineering Standards
 - **Error Handling**: Use the custom `EngineError` enum in `error.rs` for all backend failures. This ensures proper serialization for the Tauri frontend.

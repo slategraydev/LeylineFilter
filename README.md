@@ -5,6 +5,7 @@ LeylineFilter is a high-performance, modular audio processing engine built with 
 ## Features
 
 - **Modular Architecture**: Easily extensible audio processing pipeline with a lifecycle-aware `prepare` hook for modules.
+- **Graceful Shutdown**: Automatic and explicit management of audio streams ensures resources are released gracefully when the application closes.
 - **Sample Rate Independence**: Full support for arbitrary hardware sample rates (44.1kHz, 48kHz, 96kHz, etc.) with automatic engine adaptation.
 - **Real-time Safety**: Lock-free audio threading for glitch-free performance.
 - **Low Latency**: Optimized DSP routines and smart resampling that only engages when hardware input/output rates differ.

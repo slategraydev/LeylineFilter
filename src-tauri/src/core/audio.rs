@@ -488,11 +488,19 @@ impl AudioEngine {
 
                     /// Stops the audio engine and drops the streams.
                     pub fn stop(&mut self) {
-                        self.input_stream = None;
-                        self.output_stream = None;
-                        log::info!("Audio engine stopped");
+                        if self.is_running() {
+                            self.input_stream = None;
+                            self.output_stream = None;
+                            log::info!("Audio engine stopped");
+                        }
                     }
                 }
+
+impl Drop for AudioEngine {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
 
 
                 #[cfg(test)]
@@ -513,6 +521,18 @@ mod tests {
         assert_eq!(level, 0.0);
         assert_eq!(spectrum, [0.0f32; 12]);
         assert_eq!(tonality, [0.0f32; 12]);
+    }
+
+    #[test]
+    fn test_stop_idempotency() {
+        let mut engine = AudioEngine::new();
+        // Should be a no-op when not running
+        engine.stop();
+        assert!(!engine.is_running());
+
+        // Should still be a no-op and not crash
+        engine.stop();
+        assert!(!engine.is_running());
     }
 
     #[test]
