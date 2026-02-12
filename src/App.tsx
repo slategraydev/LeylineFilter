@@ -7,13 +7,14 @@ import { ExpanderModule } from "./components/Modules/ExpanderModule";
 import { RNNoiseModule } from "./components/Modules/RNNoiseModule";
 import { GainModule } from "./components/Modules/GainModule";
 import { FilterModule } from "./components/Modules/FilterModule";
+import { VisualizerModule } from "./components/Modules/VisualizerModule";
 import { EngineControls } from "./components/Engine/EngineControls";
-import { Visualizer } from "./components/Visualizer/Visualizer";
 import {
   ExpanderConfig,
   RNNoiseConfig,
   GainConfig,
   FilterConfig,
+  VisualizerConfig,
 } from "./types";
 import "./App.css";
 
@@ -109,6 +110,19 @@ function App() {
     return defaults;
   });
 
+  const [visualizerConfig, setVisualizerConfig] = useState<VisualizerConfig>(() => {
+    const defaults = { enabled: true };
+    const saved = localStorage.getItem("visualizer_config");
+    if (saved) {
+      try {
+        return { ...defaults, ...JSON.parse(saved) };
+      } catch (e) {
+        console.error("Failed to parse saved config", e);
+      }
+    }
+    return defaults;
+  });
+
   /**
    * ## Config Synchronization
    * We sync to the backend whenever config changes.
@@ -153,6 +167,16 @@ function App() {
       },
     });
   }, [filterConfig]);
+
+  useEffect(() => {
+    localStorage.setItem("visualizer_config", JSON.stringify(visualizerConfig));
+    invoke("update_config", {
+      config: {
+        type: "Visualizer",
+        data: visualizerConfig,
+      },
+    });
+  }, [visualizerConfig]);
 
   const toggleEngine = () => {
     if (isRunning) {
@@ -213,19 +237,6 @@ function App() {
           </div>
         </div>
 
-        <div className="sidebar-section visualizer-section">
-          <div className="section-label">
-            <span>Visualizer</span>
-          </div>
-          <div className="visualizer-wrapper">
-            <Visualizer
-              isRunning={isRunning}
-              spectrum={metrics.spectrum}
-              tonality={metrics.tonality}
-            />
-          </div>
-        </div>
-
         <div className="sidebar-footer">
           <button
             className={`engine-toggle ${isRunning ? "stop" : "start"}`}
@@ -237,6 +248,13 @@ function App() {
       </aside>
 
       <main className="module-grid">
+        <VisualizerModule
+          enabled={visualizerConfig.enabled}
+          onToggle={(enabled) => setVisualizerConfig({ enabled })}
+          isRunning={isRunning}
+          spectrum={metrics.spectrum}
+          tonality={metrics.tonality}
+        />
         <GainModule
           config={gainConfig}
           onChange={setGainConfig}

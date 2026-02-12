@@ -10,6 +10,7 @@ pub mod voice;
 use crate::core::modules::dynamics::expander::ExpanderModule;
 use crate::core::modules::filter::biquad::BiquadModule;
 use crate::core::modules::utility::gain::GainModule;
+use crate::core::modules::utility::visualizer::VisualizerModule;
 use crate::core::modules::voice::rnnoise::RNNoiseModule;
 use crate::core::traits::AudioModule;
 
@@ -29,13 +30,14 @@ impl ModuleFactory {
             "Expander" => Some(Box::new(ExpanderModule::new(sample_rate))),
             "RNNoise" => Some(Box::new(RNNoiseModule::new(sample_rate))),
             "Filter" => Some(Box::new(BiquadModule::new(sample_rate))),
+            "Visualizer" => Some(Box::new(VisualizerModule::new())),
             _ => None,
         }
     }
 
     /// Returns a list of all available module types.
     pub fn available_types() -> Vec<&'static str> {
-        vec!["Gain", "Expander", "RNNoise", "Filter"]
+        vec!["Gain", "Expander", "RNNoise", "Filter", "Visualizer"]
     }
 }
 

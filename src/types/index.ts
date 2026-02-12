@@ -32,6 +32,10 @@ export interface FilterConfig {
   q: number;
 }
 
+export interface VisualizerConfig {
+  enabled: boolean;
+}
+
 export interface FXConfig {
   enabled: boolean;
   fx_type: "Reverb" | "Delay" | "Chorus" | "Flanger";
@@ -69,4 +73,5 @@ export type ModuleConfig =
   | { type: "Compressor"; data: CompressorConfig }
   | { type: "Filter"; data: FilterConfig }
   | { type: "FX"; data: FXConfig }
+  | { type: "Visualizer"; data: VisualizerConfig }
   | { type: "None"; data: null };

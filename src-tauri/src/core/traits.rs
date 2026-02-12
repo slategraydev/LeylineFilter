@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Configuration options for the various audio modules.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,14 +13,9 @@ pub enum ModuleConfig {
         release_ms: f32,
     },
     /// Configuration for the standard RNNoise module.
-    RNNoise {
-        enabled: bool,
-    },
+    RNNoise { enabled: bool },
     /// Configuration for a Gain module.
-    Gain {
-        enabled: bool,
-        gain_db: f32,
-    },
+    Gain { enabled: bool, gain_db: f32 },
     /// Configuration for a Compressor module.
     #[allow(dead_code)]
     Compressor {
@@ -47,6 +42,8 @@ pub enum ModuleConfig {
         mix: f32,
         params: std::collections::HashMap<String, f32>,
     },
+    /// Configuration for the Visualizer module.
+    Visualizer { enabled: bool },
     /// Placeholder for no configuration.
     None,
 }
@@ -66,13 +63,9 @@ pub enum EngineCommand {
     /// Update the configuration of a specific module.
     UpdateConfig(ModuleConfig),
     /// Add a new module to the signal chain.
-    AddModule {
-        module_type: String,
-    },
+    AddModule { module_type: String },
     /// Remove a module from the signal chain.
-    RemoveModule {
-        id: String,
-    },
+    RemoveModule { id: String },
     /// Set a specific parameter of a module by ID.
     SetParam {
         id: String,
@@ -82,9 +75,7 @@ pub enum EngineCommand {
     /// Send a MIDI message to the engine.
     MidiEvent(MidiMessage),
     /// Reorder modules in the signal chain.
-    Reorder {
-        order: Vec<String>,
-    },
+    Reorder { order: Vec<String> },
 }
 
 /// Information about a module for UI synchronization.
@@ -133,11 +124,15 @@ pub trait AudioModule: Send + Sync {
     fn category(&self) -> ModuleCategory;
 
     /// Returns the latency introduced by this module in samples.
-    fn latency_samples(&self) -> usize { 0 }
+    fn latency_samples(&self) -> usize {
+        0
+    }
 
     /// Returns the required sample rate and block size for this module, if any.
     /// (Sample Rate, Block Size)
-    fn requirements(&self) -> (Option<f32>, Option<usize>) { (None, None) }
+    fn requirements(&self) -> (Option<f32>, Option<usize>) {
+        (None, None)
+    }
 
     /// Prepares the module for processing with a specific sample rate.
     ///
@@ -170,6 +165,7 @@ pub trait AudioModule: Send + Sync {
             ModuleConfig::Compressor { enabled, .. } => enabled,
             ModuleConfig::Filter { enabled, .. } => enabled,
             ModuleConfig::FX { enabled, .. } => enabled,
+            ModuleConfig::Visualizer { enabled, .. } => enabled,
             _ => true,
         }
     }

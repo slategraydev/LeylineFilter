@@ -236,6 +236,7 @@ impl AudioEngine {
                     ModuleConfig::Compressor { .. } => "Compressor",
                     ModuleConfig::Filter { .. } => "Filter",
                     ModuleConfig::FX { .. } => "FX",
+                    ModuleConfig::Visualizer { .. } => "Visualizer",
                     _ => "Unknown",
                 };
                 if let Ok(mut configs) = self.module_configs.lock() {
