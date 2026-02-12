@@ -7,7 +7,12 @@ interface VisualizerProps {
 function LeylineLogo() {
   return (
     <div className="logo-container">
-      <svg viewBox="0 0 100 100" className="leyline-svg">
+      <svg
+        viewBox="0 0 100 100"
+        className="leyline-svg"
+        role="img"
+        aria-label="Logo"
+      >
         <defs>
           <linearGradient id="line-grad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="transparent" />

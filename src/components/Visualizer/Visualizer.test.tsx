@@ -12,7 +12,7 @@ describe("Visualizer", () => {
       />,
     );
     expect(screen.getByText(/READY/i)).toBeInTheDocument();
-    expect(screen.getByAltText(/Logo/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Logo/i)).toBeInTheDocument();
   });
 
   it("renders bars and changes height based on spectrum when running", () => {

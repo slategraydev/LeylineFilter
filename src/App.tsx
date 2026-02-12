@@ -82,7 +82,9 @@ function App() {
           <div className="metric">
             <label>Latency</label>
             <span>
-              {metrics.latency_ms < 0 ? "N/A" : `${metrics.latency_ms} ms`}
+              {metrics.latency_ms < 0
+                ? "N/A"
+                : `${Math.round(metrics.latency_ms)} ms`}
             </span>
           </div>
           <div className="metric">
