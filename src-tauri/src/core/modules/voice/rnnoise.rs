@@ -2,6 +2,7 @@ use crate::core::traits::{AudioModule, ModuleCategory, ModuleConfig};
 use crate::utils::resampling::AudioBlockProcessor;
 use crate::utils::smoothing::ParameterSmoother;
 use nnnoiseless::DenoiseState;
+use uuid::Uuid;
 
 /// An audio noise suppression module using the RNNoise algorithm.
 pub struct RNNoiseModule {
@@ -16,8 +17,12 @@ pub struct RNNoiseModule {
 
 impl RNNoiseModule {
     pub fn new(sample_rate: f32) -> Self {
+        Self::with_id(Uuid::new_v4().to_string(), sample_rate)
+    }
+
+    pub fn with_id(id: String, sample_rate: f32) -> Self {
         Self {
-            id: "rnnoise_default".to_string(),
+            id,
             enabled: false,
             sample_rate,
             denoiser: DenoiseState::new(),

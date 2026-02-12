@@ -1,21 +1,43 @@
 import { ExpanderConfig } from "../../types";
 import { BaseModule } from "./BaseModule";
+import { GridPosition } from "../../hooks/useDraggable";
 
 interface ExpanderModuleProps {
+  id: string;
+  initialPosition: GridPosition;
+  heightUnits: number;
+  onPositionChange: (id: string, pos: GridPosition) => void;
   config: ExpanderConfig;
   onChange: (config: ExpanderConfig) => void;
+  onRemove?: () => void;
+  style?: React.CSSProperties;
 }
 
-export function ExpanderModule({ config, onChange }: ExpanderModuleProps) {
+export function ExpanderModule({
+  id,
+  initialPosition,
+  heightUnits,
+  onPositionChange,
+  config,
+  onChange,
+  onRemove,
+  style,
+}: ExpanderModuleProps) {
   const updateConfig = (updates: Partial<ExpanderConfig>) => {
     onChange({ ...config, ...updates });
   };
 
   return (
     <BaseModule
+      id={id}
+      initialPosition={initialPosition}
+      heightUnits={heightUnits}
+      onPositionChange={onPositionChange}
       title="Noise Expander"
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}
+      onRemove={onRemove}
+      style={style}
     >
       <div className="control-group">
         <label>

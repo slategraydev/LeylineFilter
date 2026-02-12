@@ -1,26 +1,49 @@
 import { FilterConfig } from "../../types";
 import { BaseModule } from "./BaseModule";
+import { GridPosition } from "../../hooks/useDraggable";
 
 interface FilterModuleProps {
+  id: string;
+  initialPosition: GridPosition;
+  heightUnits: number;
+  onPositionChange: (id: string, pos: GridPosition) => void;
   config: FilterConfig;
   onChange: (config: FilterConfig) => void;
+  onRemove?: () => void;
+  style?: React.CSSProperties;
 }
 
-export function FilterModule({ config, onChange }: FilterModuleProps) {
+export function FilterModule({
+  id,
+  initialPosition,
+  heightUnits,
+  onPositionChange,
+  config,
+  onChange,
+  onRemove,
+  style,
+}: FilterModuleProps) {
   const updateConfig = (updates: Partial<FilterConfig>) => {
     onChange({ ...config, ...updates });
   };
 
   return (
     <BaseModule
+      id={id}
+      initialPosition={initialPosition}
+      heightUnits={heightUnits}
+      onPositionChange={onPositionChange}
       title="Audio Filter"
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}
+      onRemove={onRemove}
+      style={style}
     >
       <div className="control-group">
         <label>
           Type
           <select
+            className="custom-select"
             value={config.filter_type}
             disabled={!config.enabled}
             onChange={(e) =>

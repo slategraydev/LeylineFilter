@@ -1,5 +1,6 @@
 use crate::core::traits::{AudioModule, ModuleConfig, ModuleCategory};
 use crate::utils::smoothing::ParameterSmoother;
+use uuid::Uuid;
 
 /// An audio expander/gate module that reduces the volume of signals below a threshold.
 pub struct ExpanderModule {
@@ -18,10 +19,13 @@ pub struct ExpanderModule {
 }
 
 impl ExpanderModule {
-    /// Creates a new `ExpanderModule` with default settings.
     pub fn new(sample_rate: f32) -> Self {
+        Self::with_id(Uuid::new_v4().to_string(), sample_rate)
+    }
+
+    pub fn with_id(id: String, sample_rate: f32) -> Self {
         let mut m = Self {
-            id: "expander_default".to_string(),
+            id,
             threshold: ParameterSmoother::new(0.08, 10.0, sample_rate),
             ratio: ParameterSmoother::new(2.0, 10.0, sample_rate),
             attack_ms: 10.0,

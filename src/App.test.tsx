@@ -8,6 +8,29 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd) => {
     if (cmd === "get_input_devices") return ["Mic 1"];
     if (cmd === "get_output_devices") return ["Speakers 1"];
+    if (cmd === "get_engine_state")
+      return {
+        modules: [
+          {
+            id: "expander-1",
+            name: "Expander",
+            category: "Dynamics",
+            enabled: true,
+            config: {
+              type: "Expander",
+              data: {
+                enabled: true,
+                threshold: 0.1,
+                ratio: 2.0,
+                attack_ms: 10,
+                release_ms: 100,
+              },
+            },
+          },
+        ],
+        is_running: false,
+        sample_rate: 48000,
+      };
     if (cmd === "get_metrics")
       return {
         latency_ms: 10,
@@ -15,6 +38,7 @@ vi.mock("@tauri-apps/api/core", () => ({
         input_level: 0.1,
         spectrum: Array(12).fill(0.1),
         tonality: Array(12).fill(0.1),
+        state_version: 0,
       };
     return {};
   }),
@@ -26,9 +50,9 @@ describe("App Smoke Test", () => {
     expect(screen.getByText(/LEYLINE/i)).toBeInTheDocument();
   });
 
-  it("initializes with default expander settings", () => {
+  it("initializes with default expander settings", async () => {
     render(<App />);
-    expect(screen.getByText(/Noise Expander/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Noise Expander/i)).toBeInTheDocument();
   });
 
   it("displays 0 ms for latency when engine is not running", async () => {

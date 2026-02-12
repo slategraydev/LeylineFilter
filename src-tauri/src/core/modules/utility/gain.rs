@@ -1,5 +1,6 @@
 use crate::core::traits::{AudioModule, ModuleConfig, ModuleCategory};
 use crate::utils::smoothing::ParameterSmoother;
+use uuid::Uuid;
 
 /// A simple gain module.
 pub struct GainModule {
@@ -11,8 +12,12 @@ pub struct GainModule {
 
 impl GainModule {
     pub fn new(sample_rate: f32) -> Self {
+        Self::with_id(Uuid::new_v4().to_string(), sample_rate)
+    }
+
+    pub fn with_id(id: String, sample_rate: f32) -> Self {
         Self {
-            id: "gain_default".to_string(),
+            id,
             gain: ParameterSmoother::new(1.0, 10.0, sample_rate),
             enabled: true,
             sample_rate,

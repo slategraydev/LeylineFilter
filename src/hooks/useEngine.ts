@@ -94,6 +94,32 @@ export function useEngine() {
     setIsRunning(false);
   };
 
+  const addModule = async (moduleType: string) => {
+    try {
+      await invoke("send_command", {
+        command: {
+          type: "AddModule",
+          data: { module_type: moduleType }
+        }
+      });
+    } catch (e) {
+      console.error("Failed to add module:", e);
+    }
+  };
+
+  const removeModule = async (id: string) => {
+    try {
+      await invoke("send_command", {
+        command: {
+          type: "RemoveModule",
+          data: { id }
+        }
+      });
+    } catch (e) {
+      console.error("Failed to remove module:", e);
+    }
+  };
+
   return {
     isRunning,
     inputDevices,
@@ -102,5 +128,7 @@ export function useEngine() {
     metrics,
     startEngine,
     stopEngine,
+    addModule,
+    removeModule,
   };
 }

@@ -1,22 +1,44 @@
 import React from "react";
 import { GainConfig } from "../../types";
 import { BaseModule } from "./BaseModule";
+import { GridPosition } from "../../hooks/useDraggable";
 
 interface Props {
+  id: string;
+  initialPosition: GridPosition;
+  heightUnits: number;
+  onPositionChange: (id: string, pos: GridPosition) => void;
   config: GainConfig;
   onChange: (config: GainConfig) => void;
+  onRemove?: () => void;
+  style?: React.CSSProperties;
 }
 
-export const GainModule: React.FC<Props> = ({ config, onChange }) => {
+export const GainModule: React.FC<Props> = ({
+  id,
+  initialPosition,
+  heightUnits,
+  onPositionChange,
+  config,
+  onChange,
+  onRemove,
+  style,
+}) => {
   const updateConfig = (updates: Partial<GainConfig>) => {
     onChange({ ...config, ...updates });
   };
 
   return (
     <BaseModule
+      id={id}
+      initialPosition={initialPosition}
+      heightUnits={heightUnits}
+      onPositionChange={onPositionChange}
       title="Master Gain"
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}
+      onRemove={onRemove}
+      style={style}
     >
       <div className="control-group">
         <label>

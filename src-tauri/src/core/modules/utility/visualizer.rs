@@ -11,8 +11,12 @@ pub struct VisualizerModule {
 
 impl VisualizerModule {
     pub fn new() -> Self {
+        Self::with_id(Uuid::new_v4().to_string())
+    }
+
+    pub fn with_id(id: String) -> Self {
         Self {
-            id: Uuid::new_v4().to_string(),
+            id,
             enabled: true,
         }
     }

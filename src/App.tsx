@@ -8,21 +8,28 @@ import { RNNoiseModule } from "./components/Modules/RNNoiseModule";
 import { GainModule } from "./components/Modules/GainModule";
 import { FilterModule } from "./components/Modules/FilterModule";
 import { VisualizerModule } from "./components/Modules/VisualizerModule";
+import { AddModuleMenu } from "./components/Engine/AddModuleMenu";
 import { EngineControls } from "./components/Engine/EngineControls";
 import {
   ExpanderConfig,
   RNNoiseConfig,
   GainConfig,
   FilterConfig,
-  VisualizerConfig,
+  ModuleConfig,
 } from "./types";
+import { GridPosition } from "./hooks/useDraggable";
+import {
+  GRID_UNIT_PX,
+  SIDEBAR_WIDTH_PX,
+  MODULE_W_UNITS,
+  MODULE_H_UNITS,
+  MODULE_HEIGHTS,
+  GAP_UNITS
+} from "./constants";
 import "./App.css";
 
 /**
  * # Main Application Component
- * This component serves as the root state container for the UI.
- * It manages the local configuration state (persistence via localStorage)
- * and synchronizes with the backend via the useEngine hook.
  */
 function App() {
   const {
@@ -33,151 +40,200 @@ function App() {
     metrics,
     startEngine,
     stopEngine,
+    addModule,
+    removeModule,
   } = useEngine();
 
   const [selectedInput, setSelectedInput] = useState<string>("Default");
   const [selectedOutput, setSelectedOutput] = useState<string>("Default");
+  const [showAddMenu, setShowAddMenu] = useState(false);
 
-  /**
-   * ## Local State & Persistence
-   * Configuration is stored locally in React state for immediate UI responsiveness
-   * and synced to the backend via useEffect hooks.
-   */
-  const [gainConfig, setGainConfig] = useState<GainConfig>(() => {
-    const defaults = { enabled: true, gain_db: 0.0 };
-    const saved = localStorage.getItem("gain_config");
+  const [positions, setPositions] = useState<Record<string, GridPosition>>(() => {
+    const saved = localStorage.getItem("module_positions_grid");
     if (saved) {
       try {
-        return { ...defaults, ...JSON.parse(saved) };
+        return JSON.parse(saved);
       } catch (e) {
-        console.error(e);
+        console.error("Failed to parse module positions", e);
       }
     }
-    return defaults;
+    return {};
   });
 
-  const [expanderConfig, setExpanderConfig] = useState<ExpanderConfig>(() => {
-    const defaults = {
-      enabled: true,
-      threshold: 0.08,
-      ratio: 2.0,
-      attack_ms: 10.0,
-      release_ms: 100.0,
-    };
+  // Helper to find the next empty slot in the grid (using 1x1 units)
+  const findNextAvailableSlot = (currentPositions: Record<string, GridPosition>, type: string): GridPosition => {
+    // 20px buffer for scrollbars and right-side breathing room
+    const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
+    const availableUnits = Math.floor(availableWidthPx / GRID_UNIT_PX);
 
-    const saved = localStorage.getItem("expander_config");
-    if (saved) {
-      try {
-        return { ...defaults, ...JSON.parse(saved) };
-      } catch (e) {
-        console.error("Failed to parse saved config", e);
+    // Safety check: always allow at least one module width
+    const maxGx = Math.max(MODULE_W_UNITS, availableUnits);
+    const existingIds = Object.keys(currentPositions);
+
+    // We need the engineState to look up types of existing modules
+    const moduleTypeMap: Record<string, string> = {};
+    if (engineState) {
+      engineState.modules.forEach(m => {
+        moduleTypeMap[m.id] = m.config.type;
+      });
+    }
+
+    const h = MODULE_HEIGHTS[type] || MODULE_H_UNITS;
+    // If no modules, start at (1,1)
+    if (existingIds.length === 0) return { gx: 1, gy: 1 };
+
+    // Intelligent "Anchor Point" Search:
+    // We check (1,1) and points adjacent to the right/bottom of existing modules.
+    const potentialYs = [1];
+    const potentialXs = [1];
+
+    existingIds.forEach(id => {
+      const pos = currentPositions[id];
+      const mType = moduleTypeMap[id] || "default";
+      const mHeight = MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
+
+      potentialYs.push(pos.gy + mHeight + GAP_UNITS);
+      potentialXs.push(pos.gx + MODULE_W_UNITS + GAP_UNITS);
+    });
+
+    const uniqueYs = Array.from(new Set(potentialYs)).sort((a, b) => a - b);
+    const uniqueXs = Array.from(new Set(potentialXs)).sort((a, b) => a - b);
+
+    for (const gy of uniqueYs) {
+      for (const gx of uniqueXs) {
+        // Horizontal clipping check
+        if (gx + MODULE_W_UNITS - 1 > maxGx) continue;
+
+        // Check if this slot is blocked by any existing module
+        const isAreaBlocked = existingIds.some(id => {
+          const pos = currentPositions[id];
+          const mType = moduleTypeMap[id] || "default";
+          const mHeight = MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
+
+          const hOverlap = gx < pos.gx + MODULE_W_UNITS + GAP_UNITS && gx + MODULE_W_UNITS + GAP_UNITS > pos.gx;
+          const vOverlap = gy < pos.gy + mHeight + GAP_UNITS && gy + h + GAP_UNITS > pos.gy;
+          return hOverlap && vOverlap;
+        });
+
+        if (!isAreaBlocked) {
+          return { gx, gy };
+        }
       }
     }
-    return defaults;
-  });
 
-  const [rnnoiseConfig, setRnnoiseConfig] = useState<RNNoiseConfig>(() => {
-    const defaults = {
-      enabled: false,
-    };
+    return { gx: 1, gy: 1 };
+  };
 
-    const saved = localStorage.getItem("rnnoise_config");
-    if (saved) {
-      try {
-        return { ...defaults, ...JSON.parse(saved) };
-      } catch (e) {
-        console.error("Failed to parse saved config", e);
+  // Sync positions when new modules appear
+  useEffect(() => {
+    if (!engineState) return;
+
+    setPositions(prev => {
+      let changed = false;
+      const next = { ...prev };
+
+      // Prune stale positions for modules that no longer exist in the engine
+      const currentIds = new Set((engineState.modules || []).map(m => m.id));
+      Object.keys(next).forEach(id => {
+        if (!currentIds.has(id)) {
+          delete next[id];
+          changed = true;
+        }
+      });
+
+      // Add positions for new modules
+      engineState.modules?.forEach(m => {
+        if (!next[m.id]) {
+          const nextSlot = findNextAvailableSlot(next, m.config.type);
+          next[m.id] = nextSlot;
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        localStorage.setItem("module_positions_grid", JSON.stringify(next));
+        return next;
       }
-    }
-    return defaults;
-  });
+      return prev;
+    });
+  }, [engineState?.modules]);
 
-  const [filterConfig, setFilterConfig] = useState<FilterConfig>(() => {
-    const defaults: FilterConfig = {
-      enabled: false,
-      filter_type: "LPF",
-      frequency: 1000,
-      q: 0.707,
-    };
+  const handlePositionChange = (id: string, pos: GridPosition) => {
+    setPositions((prev) => {
+      // Helper to check if a specific position is blocked for a given module
+      const isBlocked = (targetPos: GridPosition, targetId: string, currentPos: Record<string, GridPosition>) => {
+        const moduleTypeMap: Record<string, string> = {};
+        engineState?.modules?.forEach(m => {
+          moduleTypeMap[m.id] = m.config.type;
+        });
 
-    const saved = localStorage.getItem("filter_config");
-    if (saved) {
-      try {
-        return { ...defaults, ...JSON.parse(saved) };
-      } catch (e) {
-        console.error("Failed to parse saved config", e);
+        const myType = moduleTypeMap[targetId] || "default";
+        const myHeight = MODULE_HEIGHTS[myType] || MODULE_H_UNITS;
+
+        return Object.entries(currentPos).some(([oid, otherPos]) => {
+          if (oid === targetId) return false;
+          const otherType = moduleTypeMap[oid] || "default";
+          const otherHeight = MODULE_HEIGHTS[otherType] || MODULE_H_UNITS;
+
+          const hOverlap = targetPos.gx < otherPos.gx + MODULE_W_UNITS + GAP_UNITS && targetPos.gx + MODULE_W_UNITS + GAP_UNITS > otherPos.gx;
+          const vOverlap = targetPos.gy < otherPos.gy + otherHeight + GAP_UNITS && targetPos.gy + myHeight + GAP_UNITS > otherPos.gy;
+          return hOverlap && vOverlap;
+        });
+      };
+
+      if (!isBlocked(pos, id, prev)) {
+        const next = { ...prev, [id]: pos };
+        localStorage.setItem("module_positions_grid", JSON.stringify(next));
+        return next;
       }
-    }
-    return defaults;
-  });
 
-  const [visualizerConfig, setVisualizerConfig] = useState<VisualizerConfig>(() => {
-    const defaults = { enabled: true };
-    const saved = localStorage.getItem("visualizer_config");
-    if (saved) {
-      try {
-        return { ...defaults, ...JSON.parse(saved) };
-      } catch (e) {
-        console.error("Failed to parse saved config", e);
+      // If blocked, find the nearest available anchor point to the dropped position
+      const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
+      const availableUnits = Math.floor(availableWidthPx / GRID_UNIT_PX);
+      const maxGx = Math.max(MODULE_W_UNITS, availableUnits);
+
+      const moduleTypeMap: Record<string, string> = {};
+      engineState?.modules?.forEach(m => {
+        moduleTypeMap[m.id] = m.config.type;
+      });
+
+      const potentialYs = [1, pos.gy];
+      const potentialXs = [1, pos.gx];
+
+      Object.entries(prev).forEach(([oid, otherPos]) => {
+        if (oid === id) return;
+        const otherType = moduleTypeMap[oid] || "default";
+        const otherHeight = MODULE_HEIGHTS[otherType] || MODULE_H_UNITS;
+        potentialYs.push(otherPos.gy + otherHeight + GAP_UNITS);
+        potentialXs.push(otherPos.gx + MODULE_W_UNITS + GAP_UNITS);
+      });
+
+      const uniqueYs = Array.from(new Set(potentialYs));
+      const uniqueXs = Array.from(new Set(potentialXs));
+
+      let bestPos = prev[id]; // Fallback to old position
+      let minDistance = Infinity;
+
+      for (const gy of uniqueYs) {
+        for (const gx of uniqueXs) {
+          if (gx + MODULE_W_UNITS - 1 > maxGx) continue;
+          if (gx < 1 || gy < 1) continue;
+
+          if (!isBlocked({ gx, gy }, id, prev)) {
+            const dist = Math.sqrt(Math.pow(gx - pos.gx, 2) + Math.pow(gy - pos.gy, 2));
+            if (dist < minDistance) {
+              minDistance = dist;
+              bestPos = { gx, gy };
+            }
+          }
+        }
       }
-    }
-    return defaults;
-  });
 
-  /**
-   * ## Config Synchronization
-   * We sync to the backend whenever config changes.
-   * Note: The backend handles parameter smoothing, so rapid updates are safe.
-   */
-  useEffect(() => {
-    localStorage.setItem("gain_config", JSON.stringify(gainConfig));
-    invoke("update_config", {
-      config: {
-        type: "Gain",
-        data: gainConfig,
-      },
+      const next = { ...prev, [id]: bestPos };
+      localStorage.setItem("module_positions_grid", JSON.stringify(next));
+      return next;
     });
-  }, [gainConfig]);
-
-  useEffect(() => {
-    localStorage.setItem("expander_config", JSON.stringify(expanderConfig));
-    invoke("update_config", {
-      config: {
-        type: "Expander",
-        data: expanderConfig,
-      },
-    });
-  }, [expanderConfig]);
-
-  useEffect(() => {
-    localStorage.setItem("rnnoise_config", JSON.stringify(rnnoiseConfig));
-    invoke("update_config", {
-      config: {
-        type: "RNNoise",
-        data: rnnoiseConfig,
-      },
-    });
-  }, [rnnoiseConfig]);
-
-  useEffect(() => {
-    localStorage.setItem("filter_config", JSON.stringify(filterConfig));
-    invoke("update_config", {
-      config: {
-        type: "Filter",
-        data: filterConfig,
-      },
-    });
-  }, [filterConfig]);
-
-  useEffect(() => {
-    localStorage.setItem("visualizer_config", JSON.stringify(visualizerConfig));
-    invoke("update_config", {
-      config: {
-        type: "Visualizer",
-        data: visualizerConfig,
-      },
-    });
-  }, [visualizerConfig]);
+  };
 
   const toggleEngine = () => {
     if (isRunning) {
@@ -185,6 +241,115 @@ function App() {
     } else {
       startEngine(selectedInput, selectedOutput);
     }
+  };
+
+  const handleUpdateConfig = (_id: string, config: ModuleConfig) => {
+    invoke("update_config", { config });
+  };
+
+  // Calculate container dimensions based on module positions
+  const getGridContentStyle = () => {
+    let maxGx = 0;
+    let maxGy = 0;
+
+    // Create a temporary map of types from engineState if available
+    const typeMap: Record<string, string> = {};
+    engineState?.modules?.forEach(m => {
+      typeMap[m.id] = m.config.type;
+    });
+
+    Object.entries(positions).forEach(([id, pos]) => {
+      const mType = typeMap[id] || "default";
+      const mHeight = MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
+
+      maxGx = Math.max(maxGx, pos.gx + MODULE_W_UNITS);
+      maxGy = Math.max(maxGy, pos.gy + mHeight);
+    });
+
+    return {
+      minWidth: `${maxGx * GRID_UNIT_PX + 40}px`,
+      minHeight: `${maxGy * GRID_UNIT_PX + 100}px`,
+      position: 'relative' as const,
+    };
+  };
+
+  const renderModule = (module: any) => {
+    // FIX: To prevent the "flash" artifact at (1,1), we check if the position exists.
+    // If not, we don't render it for ONE frame until the useEffect calculates the slot.
+    // This makes the module "pop" into the correct spot immediately.
+    const pos = positions[module.id];
+    if (!pos) return null;
+
+    const config = module.config;
+    const mHeight = MODULE_HEIGHTS[config.type] || MODULE_H_UNITS;
+
+    const commonProps = {
+      id: module.id,
+      initialPosition: pos,
+      heightUnits: mHeight,
+      onPositionChange: handlePositionChange,
+      onRemove: () => removeModule(module.id),
+    };
+
+    let moduleComponent = null;
+
+    switch (config.type) {
+      case "Gain":
+        moduleComponent = (
+          <GainModule
+            key={module.id}
+            {...commonProps}
+            config={config.data as GainConfig}
+            onChange={(data) => handleUpdateConfig(module.id, { type: "Gain", data })}
+          />
+        );
+        break;
+      case "Expander":
+        moduleComponent = (
+          <ExpanderModule
+            key={module.id}
+            {...commonProps}
+            config={config.data as ExpanderConfig}
+            onChange={(data) => handleUpdateConfig(module.id, { type: "Expander", data })}
+          />
+        );
+        break;
+      case "RNNoise":
+        moduleComponent = (
+          <RNNoiseModule
+            key={module.id}
+            {...commonProps}
+            config={config.data as RNNoiseConfig}
+            onChange={(data) => handleUpdateConfig(module.id, { type: "RNNoise", data })}
+          />
+        );
+        break;
+      case "Filter":
+        moduleComponent = (
+          <FilterModule
+            key={module.id}
+            {...commonProps}
+            config={config.data as FilterConfig}
+            onChange={(data) => handleUpdateConfig(module.id, { type: "Filter", data })}
+          />
+        );
+        break;
+      case "Visualizer":
+        moduleComponent = (
+          <VisualizerModule
+            key={module.id}
+            {...commonProps}
+            enabled={config.data.enabled}
+            onToggle={(enabled) => handleUpdateConfig(module.id, { type: "Visualizer", data: { enabled } })}
+            isRunning={isRunning}
+            spectrum={metrics.spectrum}
+            tonality={metrics.tonality}
+          />
+        );
+        break;
+    }
+
+    return moduleComponent;
   };
 
   return (
@@ -248,40 +413,31 @@ function App() {
         </div>
       </aside>
 
-      <main className="module-grid">
-        <VisualizerModule
-          enabled={visualizerConfig.enabled}
-          onToggle={(enabled) => setVisualizerConfig({ enabled })}
-          isRunning={isRunning}
-          spectrum={metrics.spectrum}
-          tonality={metrics.tonality}
-        />
-        <GainModule
-          config={gainConfig}
-          onChange={setGainConfig}
-        />
-        <RNNoiseModule
-          config={rnnoiseConfig}
-          onChange={setRnnoiseConfig}
-        />
-        <ExpanderModule
-          config={expanderConfig}
-          onChange={setExpanderConfig}
-        />
-        <FilterModule
-          config={filterConfig}
-          onChange={setFilterConfig}
-        />
+      <main className="module-grid" style={getGridContentStyle()}>
+        {engineState?.modules?.map(renderModule)}
 
-        {/* Placeholder for future modules */}
         <div className="module-card placeholder">
-          <button className="add-btn" aria-label="Add Module">
+          <button
+            className="add-btn"
+            aria-label="Add Module"
+            onClick={() => setShowAddMenu(!showAddMenu)}
+          >
             <svg viewBox="0 0 24 24" className="add-icon">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
           </button>
         </div>
+
+        {showAddMenu && (
+          <AddModuleMenu
+            onAdd={(type) => {
+              addModule(type);
+              setShowAddMenu(false);
+            }}
+            onClose={() => setShowAddMenu(false)}
+          />
+        )}
       </main>
     </div>
   );

@@ -1,6 +1,7 @@
 use crate::core::traits::{AudioModule, ModuleConfig, ModuleCategory};
 use crate::utils::smoothing::ParameterSmoother;
 use std::f32::consts::PI;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FilterType {
@@ -41,8 +42,12 @@ pub struct BiquadModule {
 
 impl BiquadModule {
     pub fn new(sample_rate: f32) -> Self {
+        Self::with_id(Uuid::new_v4().to_string(), sample_rate)
+    }
+
+    pub fn with_id(id: String, sample_rate: f32) -> Self {
         let mut module = Self {
-            id: "filter_default".to_string(),
+            id,
             enabled: true,
             filter_type: FilterType::LowPass,
             freq_smoother: ParameterSmoother::new(1000.0, 10.0, sample_rate),
@@ -57,7 +62,8 @@ impl BiquadModule {
         module
     }
 
-        fn update_coefficients(&mut self, freq: f32, q: f32) {
+    fn update_coefficients(&mut self, freq: f32, q: f32) {
+
             let f0 = freq.clamp(20.0, self.sample_rate * 0.45);
             let q = q.max(0.01);
 

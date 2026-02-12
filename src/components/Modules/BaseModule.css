@@ -1,24 +1,49 @@
 .module-card {
+    box-sizing: border-box;
     background: #060606;
-    /* Slightly darker */
     border: 1px solid var(--color-border);
     padding: 0;
     display: flex;
     flex-direction: column;
-    width: 340px;
-    /* Slightly wider */
+    width: 324px;
+    /* 18px * 18 units */
     position: relative;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    /* Add some depth */
+    overflow: hidden;
+
+    /* Mechanical transition - scale removed */
+    transition:
+        opacity 0.4s cubic-bezier(0.23, 1, 0.32, 1),
+        border-color 0.3s ease;
 }
 
 .module-card.active {
-    border-color: #444;
-    /* Neutral highlight instead of red */
+    border-color: #333;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 15px rgba(170, 65, 65, 0.05);
+}
+
+.module-card.active .module-header {
+    background: #0d0d0d;
+}
+
+.module-card.active .module-header h3 {
+    color: var(--color-accent);
+    text-shadow: 0 0 8px rgba(170, 65, 65, 0.3);
 }
 
 .module-card.inactive {
-    opacity: 0.6;
+    opacity: 0.5;
+}
+
+.module-card.inactive .module-content {
+    filter: grayscale(1) blur(0.5px);
+    pointer-events: none;
+    transition: all 0.4s ease;
+}
+
+.module-card.active .module-content {
+    filter: grayscale(0) blur(0px);
+    transition: all 0.4s ease;
 }
 
 .module-header {
@@ -26,25 +51,74 @@
     justify-content: space-between;
     align-items: center;
     padding: 16px 20px;
-    /* More breathing room */
     background: #0a0a0a;
     border-bottom: 1px solid var(--color-border);
+    cursor: grab;
+    user-select: none;
+    transition: background 0.3s ease;
 }
 
-.header-left {
+.header-left,
+.header-right {
+    flex: 0 0 44px;
+    /* Fixed width to match switch size */
     display: flex;
-    flex-direction: column;
+    align-items: center;
+}
+
+.header-right {
+    justify-content: flex-end;
+}
+
+.header-center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
 }
 
 .module-header h3 {
     margin: 0;
     font-family: var(--font-ui);
     font-size: 1.1rem;
-    /* Bigger */
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--color-text-main);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.remove-module-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-dim);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    opacity: 0.4;
+}
+
+.remove-module-btn:hover {
+    color: var(--color-accent);
+    opacity: 1;
+}
+
+.remove-module-btn svg {
+    stroke: currentColor;
+    stroke-width: 2;
 }
 
 .module-content {

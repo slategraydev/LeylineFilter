@@ -7,17 +7,8 @@
     --color-text-dim: #888888;
     --color-accent: #aa4141;
 
-    /* Legacy/Logo Support */
-    --color-gunmetal: var(--color-border);
-    --color-mauve: var(--color-accent);
-    --color-silver: var(--color-text-main);
-    --color-carbon: var(--color-bg);
-    --color-shadow: var(--color-panel);
-
-    --grid-unit: 10px;
-    /* Smaller grid */
+    --grid-unit: 18px;
     --sidebar-width: 340px;
-    /* Slightly wider for bigger text */
 
     --font-mono: "JetBrains Mono", "Fira Code", "Consolas", monospace;
     --font-ui: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -74,6 +65,7 @@ body {
     padding: 0;
     position: relative;
     z-index: 10;
+    width: var(--sidebar-width);
 }
 
 .sidebar header {
@@ -153,10 +145,15 @@ body {
 
 .selector select {
     width: 100%;
+}
+
+/* Fallback if composes isn't supported in this environment */
+.selector select {
+    width: 100%;
     background: black;
     border: 1px solid var(--color-border);
     color: var(--color-text-main);
-    padding: 8px;
+    padding: 8px 30px 8px 8px;
     border-radius: 0;
     font-family: var(--font-mono);
     font-size: 0.9rem;
@@ -245,9 +242,9 @@ body {
 
 /* --- Main Rack Area --- */
 .module-grid {
-    /* Subtler grid */
-    --grid-unit: 8px;
-    --color-border-grid: rgba(255, 255, 255, 0.02);
+    /* More visible grid */
+    --grid-unit: 18px;
+    --color-border-grid: rgba(255, 255, 255, 0.035);
 
     background-image:
         linear-gradient(var(--color-border-grid) 1px, transparent 1px),
@@ -255,12 +252,11 @@ body {
     background-size: var(--grid-unit) var(--grid-unit);
     background-color: #030303;
 
-    padding: 40px;
-    overflow-y: auto;
-    display: flex;
-    flex-wrap: wrap;
-    align-content: flex-start;
-    gap: 24px;
+    padding: 0;
+    overflow: auto;
+    position: relative;
+    flex-grow: 1;
+    min-height: 0;
 }
 
 .sidebar-footer {
@@ -384,6 +380,41 @@ body {
 }
 
 /* --- Common Controls --- */
+.custom-select {
+    background: black;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-main);
+    padding: 8px 30px 8px 8px;
+    /* Added right padding for the arrow */
+    border-radius: 0;
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    appearance: none;
+    /* Remove default arrow */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23888' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: calc(100% - 10px) center;
+}
+
+
+.custom-select:hover {
+    border-color: #444;
+}
+
+.custom-select:focus {
+    outline: none;
+    border-color: #444;
+    /* Keep it neutral instead of red */
+}
+
+.custom-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 input[type="range"] {
     appearance: none;
     width: 100%;
