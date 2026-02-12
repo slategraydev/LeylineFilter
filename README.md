@@ -17,6 +17,7 @@ LeylineFilter is a high-performance, modular audio processing engine built with 
 - **Framework**: [Tauri v2](https://tauri.app/)
 - **Audio I/O**: [CPAL](https://github.com/RustAudio/cpal)
 - **DSP/Resampling**: [Rubato](https://github.com/HesselM/rubato)
+- **Monitoring**: [sysinfo](https://github.com/GuillaumeGomez/sysinfo)
 
 ## Project Structure
 

@@ -29,4 +29,31 @@ describe("App Smoke Test", () => {
     render(<App />);
     expect(screen.getByText(/Noise Expander/i)).toBeInTheDocument();
   });
+
+  it("displays N/A for latency when engine is not running", async () => {
+    // Mock latency_ms as -1 to simulate engine not running
+    vi.mocked(invoke).mockResolvedValueOnce({
+      latency_ms: -1,
+      cpu_usage: 2,
+      input_level: 0,
+      spectrum: Array(12).fill(0),
+      tonality: Array(12).fill(0),
+    } as any);
+
+    render(<App />);
+    expect(await screen.findByText(/N\/A/i)).toBeInTheDocument();
+  });
+
+  it("rounds latency to the nearest whole number", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      latency_ms: 10.7,
+      cpu_usage: 5,
+      input_level: 0,
+      spectrum: Array(12).fill(0),
+      tonality: Array(12).fill(0),
+    } as any);
+
+    render(<App />);
+    expect(await screen.findByText(/11 ms/i)).toBeInTheDocument();
+  });
 });

@@ -74,11 +74,22 @@ pub struct Metrics {
 /// Tauri command to retrieve current engine metrics.
 #[tauri::command]
 async fn get_metrics(state: State<'_, AppState>) -> std::result::Result<Metrics, String> {
-    let engine = state.engine.lock().map_err(|e| e.to_string())?;
-    let (latency, cpu, level, spectrum, tonality) = engine.metrics.get();
+    let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
 
-    Ok(Metrics {
-        latency_ms: (latency * 100.0).round() / 100.0,
+    // Always update CPU usage
+    engine.update_cpu_usage();
+
+        let is_running = engine.is_running();
+        let (_, cpu, level, spectrum, tonality) = engine.metrics.get();
+
+        // If not running, latency should be reported as a sentinel for "N/A"
+        let latency = if !is_running {
+            -1.0
+        } else {
+            engine.get_total_latency_ms()
+        };
+        Ok(Metrics {
+        latency_ms: latency.round(),
         cpu_usage: (cpu * 10.0).round() / 10.0,
         input_level: level,
         spectrum,

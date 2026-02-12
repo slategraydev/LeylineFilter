@@ -81,7 +81,9 @@ function App() {
         <div className="metrics-panel">
           <div className="metric">
             <label>Latency</label>
-            <span>{metrics.latency_ms} ms</span>
+            <span>
+              {metrics.latency_ms < 0 ? "N/A" : `${metrics.latency_ms} ms`}
+            </span>
           </div>
           <div className="metric">
             <label>CPU Usage</label>

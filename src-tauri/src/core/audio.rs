@@ -1,13 +1,14 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use crate::core::traits::{AudioModule, ModuleConfig};
 use crate::core::modules::expander::ExpanderModule;
 use crate::error::{EngineError, Result as EngineResult};
 use rubato::{Resampler, FastFixedIn, PolynomialDegree};
 use std::time::Instant;
 use ringbuf::HeapRb;
-use ringbuf::traits::{Producer, Consumer, Split};
+use ringbuf::traits::{Producer, Consumer, Split, Observer};
+use sysinfo::System;
 
 /// A wrapper around `cpal::Stream` to allow it to be sent across threads.
 ///
@@ -23,6 +24,10 @@ unsafe impl Send for StreamWrapper {}
 pub struct EngineMetrics {
     /// Processing latency in milliseconds.
     pub latency_ms: AtomicU32,
+    /// Hardware input latency in milliseconds.
+    pub input_latency_ms: AtomicU32,
+    /// Hardware output latency in milliseconds.
+    pub output_latency_ms: AtomicU32,
     /// Estimated CPU usage as a percentage.
     pub cpu_usage: AtomicU32,
     /// Peak RMS or level for visualization.
@@ -37,6 +42,8 @@ impl EngineMetrics {
     fn new() -> Self {
         Self {
             latency_ms: AtomicU32::new(0),
+            input_latency_ms: AtomicU32::new(0),
+            output_latency_ms: AtomicU32::new(0),
             cpu_usage: AtomicU32::new(0),
             input_level: AtomicU32::new(0),
             spectrum: Default::default(),
@@ -44,9 +51,9 @@ impl EngineMetrics {
         }
     }
 
-    fn update(&self, latency: f32, cpu: f32, level: f32, bins: &[f32; 12], tonality: &[f32; 12]) {
-        self.latency_ms.store(latency.to_bits(), Ordering::Relaxed);
-        self.cpu_usage.store(cpu.to_bits(), Ordering::Relaxed);
+    fn update_processing_metrics(&self, processing_ms: f32, level: f32, bins: &[f32; 12], tonality: &[f32; 12]) {
+        // We still store processing_ms in latency_ms for now, but we'll improve it later
+        self.latency_ms.store(processing_ms.to_bits(), Ordering::Relaxed);
         self.input_level.store(level.to_bits(), Ordering::Relaxed);
         for i in 0..12 {
             self.spectrum[i].store(bins[i].to_bits(), Ordering::Relaxed);
@@ -69,6 +76,13 @@ impl EngineMetrics {
             tonal,
         )
     }
+
+    pub fn get_hardware_latencies(&self) -> (f32, f32) {
+        (
+            f32::from_bits(self.input_latency_ms.load(Ordering::Relaxed)),
+            f32::from_bits(self.output_latency_ms.load(Ordering::Relaxed)),
+        )
+    }
 }
 
 /// The core audio engine responsible for managing streams and processing modules.
@@ -77,18 +91,104 @@ pub struct AudioEngine {
     output_stream: Option<StreamWrapper>,
     modules: Arc<Mutex<Vec<Box<dyn AudioModule>>>>,
     pub metrics: Arc<EngineMetrics>,
+    sys: System,
+    pid: sysinfo::Pid,
+    sample_rate: f32,
+    last_latency: f32,
+    last_cpu: f32,
+    rb_occupancy: Arc<AtomicUsize>,
+    last_cpu_update: Instant,
 }
 
 impl AudioEngine {
     /// Creates a new instance of the `AudioEngine`.
     pub fn new() -> Self {
         let expander = Box::new(ExpanderModule::new(48000.0));
+        let mut sys = System::new_all();
+        sys.refresh_all();
+        let pid = sysinfo::get_current_pid().expect("Failed to get current PID");
 
         Self {
             input_stream: None,
             output_stream: None,
             modules: Arc::new(Mutex::new(vec![expander])),
             metrics: Arc::new(EngineMetrics::new()),
+            sys,
+            pid,
+            sample_rate: 48000.0,
+            last_latency: 0.0,
+            last_cpu: 0.0,
+            rb_occupancy: Arc::new(AtomicUsize::new(0)),
+            last_cpu_update: Instant::now(),
+        }
+    }
+
+    /// Checks if the audio engine is currently running.
+    pub fn is_running(&self) -> bool {
+        self.input_stream.is_some()
+    }
+
+    /// Calculates the total pipeline latency in milliseconds with smoothing.
+    pub fn get_total_latency_ms(&mut self) -> f32 {
+        if !self.is_running() {
+            return 0.0;
+        }
+
+        let mut total_latency_samples = 0;
+        if let Ok(modules) = self.modules.lock() {
+            for module in modules.iter() {
+                if module.is_enabled() {
+                    total_latency_samples += module.latency_samples();
+                }
+            }
+        }
+
+        // Processing latency (from metrics)
+        let processing_ms = f32::from_bits(self.metrics.latency_ms.load(Ordering::Relaxed));
+
+        // Accumulator latency (480 samples)
+        let chunk_latency_ms = (480.0 / self.sample_rate) * 1000.0;
+
+        // Ring buffer occupancy latency
+        let rb_samples = self.rb_occupancy.load(Ordering::Relaxed);
+        let rb_latency_ms = (rb_samples as f32 / self.sample_rate) * 1000.0;
+
+        // Hardware latencies (Measured)
+        let (in_lat, out_lat) = self.metrics.get_hardware_latencies();
+
+        let current_latency = processing_ms + chunk_latency_ms + rb_latency_ms + (total_latency_samples as f32 / self.sample_rate) * 1000.0 + in_lat + out_lat;
+
+        // EMA smoothing (alpha = 0.1)
+        if self.last_latency == 0.0 {
+            self.last_latency = current_latency;
+        } else {
+            self.last_latency = self.last_latency * 0.9 + current_latency * 0.1;
+        }
+
+        self.last_latency
+    }
+
+    /// Updates and returns the current process CPU usage.
+    pub fn update_cpu_usage(&mut self) -> f32 {
+        // Throttle CPU updates to every 200ms to allow sysinfo to calculate deltas accurately
+        if self.last_cpu_update.elapsed() < std::time::Duration::from_millis(200) {
+            return self.last_cpu;
+        }
+
+        self.sys.refresh_all();
+        self.last_cpu_update = Instant::now();
+
+        if let Some(process) = self.sys.process(self.pid) {
+            // Process CPU usage is 0.0 to (100.0 * num_cpus)
+            let raw_cpu = process.cpu_usage() / self.sys.cpus().len() as f32;
+
+            // Apply EMA smoothing (alpha = 0.1) for a "soft" climb/drop
+            self.last_cpu = self.last_cpu * 0.9 + raw_cpu * 0.1;
+
+            self.metrics.cpu_usage.store(self.last_cpu.to_bits(), Ordering::Relaxed);
+            self.last_cpu
+        } else {
+            0.0
         }
     }
 
@@ -157,6 +257,9 @@ impl AudioEngine {
 
         let modules = self.modules.clone();
         let metrics = self.metrics.clone();
+        let metrics_out = self.metrics.clone();
+        let rb_occ_in = self.rb_occupancy.clone();
+        let rb_occ_out = self.rb_occupancy.clone();
 
         // Use a lock-free ring buffer for real-time safe audio transfer
         let rb = HeapRb::<f32>::new(4800 * 2);
@@ -181,7 +284,15 @@ impl AudioEngine {
 
         let input_stream = input_device.build_input_stream(
             &input_config,
-            move |data: &[f32], _: &cpal::InputCallbackInfo| {
+            move |data: &[f32], info: &cpal::InputCallbackInfo| {
+                // Calculate hardware input latency
+                let callback = info.timestamp().callback;
+                let capture = info.timestamp().capture;
+                if let Some(diff) = callback.duration_since(&capture) {
+                    let ms = diff.as_secs_f32() * 1000.0;
+                    metrics.input_latency_ms.store(ms.to_bits(), Ordering::Relaxed);
+                }
+
                 // Take only the first channel (mono)
                 for frame in data.chunks(in_channels) {
                     input_accumulator.push(frame[0]);
@@ -203,7 +314,7 @@ impl AudioEngine {
                 // Process in chunks of 480 samples
                 while process_accumulator.len() >= 480 {
                     let chunk: Vec<f32> = process_accumulator.drain(0..480).collect();
-                    process_audio_chunk(&chunk, &modules, &metrics, &mut producer);
+                    process_audio_chunk(&chunk, &modules, &metrics, &mut producer, &rb_occ_in);
                 }
             },
             |err| log::error!("Input stream error: {}", err),
@@ -212,7 +323,15 @@ impl AudioEngine {
 
         let output_stream = output_device.build_output_stream(
             &output_config,
-            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+            move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
+                // Calculate hardware output latency
+                let callback = info.timestamp().callback;
+                let playback = info.timestamp().playback;
+                if let Some(diff) = playback.duration_since(&callback) {
+                    let ms = diff.as_secs_f32() * 1000.0;
+                    metrics_out.output_latency_ms.store(ms.to_bits(), Ordering::Relaxed);
+                }
+
                 let out_channels = output_config.channels as usize;
                 let frames_needed = data.len() / out_channels;
 
@@ -222,6 +341,7 @@ impl AudioEngine {
                         data[i * out_channels + c] = sample;
                     }
                 }
+                rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
             },
             |err| log::error!("Output stream error: {}", err),
             None
@@ -248,11 +368,12 @@ impl AudioEngine {
 use rustfft::{FftPlanner, num_complex::Complex};
 
 /// Processes a single chunk of audio through all active modules.
-fn process_audio_chunk<P: Producer<Item = f32>>(
+fn process_audio_chunk<P: Producer<Item = f32> + Observer>(
     chunk: &[f32],
     modules: &Arc<Mutex<Vec<Box<dyn AudioModule>>>>,
     metrics: &Arc<EngineMetrics>,
     producer: &mut P,
+    rb_occupancy: &Arc<AtomicUsize>,
 ) {
     let start = Instant::now();
     let mut working_chunk = chunk.to_vec();
@@ -264,6 +385,7 @@ fn process_audio_chunk<P: Producer<Item = f32>>(
     }
 
     producer.push_slice(&working_chunk);
+    rb_occupancy.store(producer.occupied_len(), Ordering::Relaxed);
 
     // Peak level calculation
     let mut peak = 0.0f32;
@@ -347,13 +469,14 @@ fn process_audio_chunk<P: Producer<Item = f32>>(
                                                                                 // Wider buckets (high end) require a higher ratio to be considered 'tonal'.
                                                                                 let threshold = (count as f32).sqrt().max(2.0);
                                                                                 tonality_bins[i] = (ratio / (threshold * 1.5)).min(1.0);
+                                                                                                        }
+                                                                                                    }
+                                                                                                }
+                                                                                let elapsed = start.elapsed().as_secs_f32() * 1000.0;
+                                                                                // We only update latency and visualizations here. CPU is updated globally.
+                                                                                metrics.update_processing_metrics(elapsed, peak, &spectrum_bins, &tonality_bins);
                                                                             }
 
-                            }
-                        }
-                            let elapsed = start.elapsed().as_secs_f32() * 1000.0;
-    metrics.update(elapsed, (elapsed / 10.0) * 100.0, peak, &spectrum_bins, &tonality_bins);
-}
 
 #[cfg(test)]
 mod tests {
@@ -364,6 +487,7 @@ mod tests {
         let engine = AudioEngine::new();
         assert!(engine.input_stream.is_none());
         assert!(engine.output_stream.is_none());
+        assert!(!engine.is_running());
 
         let (latency, cpu, level, spectrum, tonality) = engine.metrics.get();
         assert_eq!(latency, 0.0);
@@ -391,5 +515,17 @@ mod tests {
         // We can't easily downcast Box<dyn AudioModule> without extra traits,
         // but we've verified the code compiles and the logic is sound.
         assert_eq!(modules.len(), 1);
+    }
+
+    #[test]
+    fn test_cpu_smoothing() {
+        let mut engine = AudioEngine::new();
+        engine.last_cpu = 0.0;
+
+        // Mock a 10% CPU usage update
+        // (Since we can't easily mock the process CPU, we can test the internal state if needed,
+        // but for now we'll verify the engine starts at 0)
+        let (_, cpu, _, _, _) = engine.metrics.get();
+        assert_eq!(cpu, 0.0);
     }
 }

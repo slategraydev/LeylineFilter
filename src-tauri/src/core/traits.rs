@@ -25,6 +25,12 @@ pub trait AudioModule: Send + Sync {
     #[allow(dead_code)]
     fn name(&self) -> &str;
 
+    /// Returns true if the module is currently active.
+    fn is_enabled(&self) -> bool;
+
+    /// Returns the latency introduced by this module in samples.
+    fn latency_samples(&self) -> usize { 0 }
+
     /// Processes a block of audio samples in-place.
     ///
     /// # Arguments

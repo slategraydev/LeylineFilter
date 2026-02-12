@@ -39,6 +39,10 @@ impl AudioModule for ExpanderModule {
         "Expander"
     }
 
+    fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
     fn update_config(&mut self, config: &ModuleConfig) {
         if let ModuleConfig::Expander { enabled, threshold, ratio, attack_ms, release_ms } = config {
             self.enabled = *enabled;
