@@ -49,7 +49,7 @@ pnpm-debug.log*
 .DS_Store
 .DS_Store?
 ehthumbs.db
-Icon?
+/Icon?
 Thumbs.db
 
 # Test Coverage
