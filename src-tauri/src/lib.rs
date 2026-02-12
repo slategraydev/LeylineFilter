@@ -1,0 +1,111 @@
+mod core;
+mod utils;
+mod error;
+
+use crate::core::audio::{AudioEngine};
+use crate::core::traits::{ModuleConfig};
+use std::sync::{Arc, Mutex};
+use tauri::{State};
+use serde::{Serialize, Deserialize};
+
+/// Global application state.
+pub struct AppState {
+    /// The core audio engine, protected by a Mutex for thread-safe access from Tauri commands.
+    pub engine: Arc<Mutex<AudioEngine>>,
+}
+
+/// Tauri command to update a module's configuration.
+#[tauri::command]
+async fn update_config(state: State<'_, AppState>, config: ModuleConfig) -> std::result::Result<(), String> {
+    let engine = state.engine.lock().map_err(|e| e.to_string())?;
+    engine.update_module_config(config);
+    Ok(())
+}
+
+/// Tauri command to start the audio engine.
+#[tauri::command]
+async fn start_engine(
+    state: State<'_, AppState>,
+    input_device: Option<String>,
+    output_device: Option<String>
+) -> std::result::Result<(), String> {
+    let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
+    engine.start(input_device, output_device).map_err(|e| e.to_string())
+}
+
+/// Tauri command to get available output devices.
+#[tauri::command]
+async fn get_output_devices(state: State<'_, AppState>) -> std::result::Result<Vec<String>, String> {
+    log::info!("Fetching output devices...");
+    let engine = state.engine.lock().map_err(|e| e.to_string())?;
+    let devices = engine.get_output_devices();
+    log::info!("Found {} output devices", devices.len());
+    Ok(devices)
+}
+
+/// Tauri command to get available input devices.
+#[tauri::command]
+async fn get_input_devices(state: State<'_, AppState>) -> std::result::Result<Vec<String>, String> {
+    log::info!("Fetching input devices...");
+    let engine = state.engine.lock().map_err(|e| e.to_string())?;
+    let devices = engine.get_input_devices();
+    log::info!("Found {} input devices", devices.len());
+    Ok(devices)
+}
+
+/// Tauri command to stop the audio engine.
+#[tauri::command]
+async fn stop_engine(state: State<'_, AppState>) -> std::result::Result<(), String> {
+    let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
+    engine.stop();
+    Ok(())
+}
+
+/// Metrics exported to the frontend.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Metrics {
+    latency_ms: f32,
+    cpu_usage: f32,
+}
+
+/// Tauri command to retrieve current engine metrics.
+#[tauri::command]
+async fn get_metrics(state: State<'_, AppState>) -> std::result::Result<Metrics, String> {
+    let engine = state.engine.lock().map_err(|e| e.to_string())?;
+    let (latency, cpu) = engine.metrics.get();
+
+    Ok(Metrics {
+        latency_ms: (latency * 100.0).round() / 100.0,
+        cpu_usage: (cpu * 10.0).round() / 10.0,
+    })
+}
+
+/// The main entry point for the Tauri application.
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    utils::logger::init();
+    log::info!("Initializing LeylineFilter Modular Engine...");
+
+    let state = AppState {
+        engine: Arc::new(Mutex::new(AudioEngine::new())),
+    };
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .manage(state)
+        .invoke_handler(tauri::generate_handler![
+            start_engine,
+            stop_engine,
+            get_metrics,
+            update_config,
+            get_input_devices,
+            get_output_devices
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                log::info!("Application exiting...");
+            }
+        });
+}
