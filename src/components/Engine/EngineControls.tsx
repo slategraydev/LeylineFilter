@@ -23,32 +23,36 @@ export function EngineControls({
     <div className="engine-controls">
       <div className="device-selectors">
         <div className="selector">
-          <label>Input</label>
-          <select
-            value={selectedInput}
-            onChange={(e) => onInputChange(e.target.value)}
-            disabled={isRunning}
-          >
-            {inputDevices.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
+          <label>
+            Input
+            <select
+              value={selectedInput}
+              onChange={(e) => onInputChange(e.target.value)}
+              disabled={isRunning}
+            >
+              {inputDevices.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="selector">
-          <label>Output</label>
-          <select
-            value={selectedOutput}
-            onChange={(e) => onOutputChange(e.target.value)}
-            disabled={isRunning}
-          >
-            {outputDevices.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
+          <label>
+            Output
+            <select
+              value={selectedOutput}
+              onChange={(e) => onOutputChange(e.target.value)}
+              disabled={isRunning}
+            >
+              {outputDevices.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
       <button

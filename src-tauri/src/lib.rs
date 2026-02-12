@@ -97,6 +97,29 @@ pub struct Metrics {
     state_version: u32,
 }
 
+impl Metrics {
+    pub fn from_engine(engine: &mut AudioEngine) -> Self {
+        let is_running = engine.is_running();
+        let (_, cpu, level, spectrum, tonality, version) = engine.metrics.get();
+
+        // If not running, latency should be reported as 0.0
+        let latency = if !is_running {
+            0.0
+        } else {
+            engine.get_total_latency_ms()
+        };
+
+        Metrics {
+            latency_ms: latency.round(),
+            cpu_usage: (cpu * 10.0).round() / 10.0,
+            input_level: level,
+            spectrum,
+            tonality,
+            state_version: version,
+        }
+    }
+}
+
 /// Tauri command to retrieve current engine metrics.
 #[tauri::command]
 async fn get_metrics(state: State<'_, AppState>) -> std::result::Result<Metrics, String> {
@@ -108,23 +131,24 @@ async fn get_metrics(state: State<'_, AppState>) -> std::result::Result<Metrics,
     // Process garbage collected from the audio thread
     engine.process_garbage();
 
-    let is_running = engine.is_running();
-    let (_, cpu, level, spectrum, tonality, version) = engine.metrics.get();
+    Ok(Metrics::from_engine(&mut engine))
+}
 
-    // If not running, latency should be reported as 0.0
-    let latency = if !is_running {
-        0.0
-    } else {
-        engine.get_total_latency_ms()
-    };
-    Ok(Metrics {
-        latency_ms: latency.round(),
-        cpu_usage: (cpu * 10.0).round() / 10.0,
-        input_level: level,
-        spectrum,
-        tonality,
-        state_version: version,
-    })
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::audio::AudioEngine;
+
+    #[test]
+    fn test_metrics_formatting() {
+        let mut engine = AudioEngine::new();
+        // By default, engine is not running, so latency should be 0.0
+        let metrics = Metrics::from_engine(&mut engine);
+
+        assert_eq!(metrics.latency_ms, 0.0);
+        assert_eq!(metrics.cpu_usage, 0.0);
+        assert_eq!(metrics.state_version, 0);
+    }
 }
 /// The main entry point for the Tauri application.
 ///
