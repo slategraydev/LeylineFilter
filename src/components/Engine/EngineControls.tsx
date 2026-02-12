@@ -6,7 +6,6 @@ interface EngineControlsProps {
   selectedOutput: string;
   onInputChange: (device: string) => void;
   onOutputChange: (device: string) => void;
-  onToggle: () => void;
 }
 
 export function EngineControls({
@@ -17,7 +16,6 @@ export function EngineControls({
   selectedOutput,
   onInputChange,
   onOutputChange,
-  onToggle,
 }: EngineControlsProps) {
   return (
     <div className="engine-controls">

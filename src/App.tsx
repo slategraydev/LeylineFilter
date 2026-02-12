@@ -8,7 +8,6 @@ import { RNNoiseModule } from "./components/Modules/RNNoiseModule";
 import { GainModule } from "./components/Modules/GainModule";
 import { FilterModule } from "./components/Modules/FilterModule";
 import { VisualizerModule } from "./components/Modules/VisualizerModule";
-import { LeylineLogo } from "./components/Visualizer/Visualizer";
 import { EngineControls } from "./components/Engine/EngineControls";
 import {
   ExpanderConfig,
@@ -210,7 +209,6 @@ function App() {
             selectedOutput={selectedOutput}
             onInputChange={setSelectedInput}
             onOutputChange={setSelectedOutput}
-            onToggle={toggleEngine}
           />
         </div>
 
