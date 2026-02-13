@@ -33,7 +33,6 @@ export function AddModuleMenu({ onAdd, onClose, existingTypes }: AddModuleMenuPr
               className="menu-item"
               onClick={() => {
                 onAdd(item.type);
-                onClose();
               }}
             >
               {item.label}

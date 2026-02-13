@@ -2,7 +2,7 @@
 
 import React, { useLayoutEffect, useRef } from 'react';
 import { useDraggable, GridPosition } from '../../hooks/useDraggable';
-import { GRID_UNIT_PX } from '../../constants';
+import { GRID_UNIT_PX, MODULE_W_UNITS } from '../../constants';
 import './BaseModule.css';
 
 interface BaseModuleProps {
@@ -11,7 +11,7 @@ interface BaseModuleProps {
   heightUnits: number;
   scale?: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
-  onDrag?: (id: string, pos: GridPosition | null) => void;
+  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
   onHeightReport?: (id: string, units: number) => void;
   title: string;
   enabled: boolean;
@@ -50,10 +50,13 @@ export function BaseModule({
       onPositionChange(id, newPos);
       if (onDrag) onDrag(id, null);
     },
-    (newPos) => {
-      if (onDrag) onDrag(id, newPos);
+    (newPos, rawOffset, continuousPos) => {
+      if (onDrag) onDrag(id, newPos, rawOffset, continuousPos);
     },
-    scale
+    scale,
+    () => {
+      if (onDrag) onDrag(id, initialPosition, { x: 0, y: 0 }, initialPosition);
+    }
   );
 
   const moduleRef = useRef<HTMLDivElement>(null);
@@ -102,7 +105,9 @@ export function BaseModule({
     position: 'absolute',
     left: `${displayX}px`,
     top: `${displayY}px`,
+    width: `${MODULE_W_UNITS * GRID_UNIT_PX}px`,
     height: `${heightUnits * GRID_UNIT_PX}px`,
+    boxSizing: 'border-box',
     zIndex: isDragging ? 1000 : 1,
     transition: isDragging ? 'none' : 'left 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), top 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)',
     ...style,

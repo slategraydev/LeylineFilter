@@ -48,6 +48,7 @@ function App() {
   const [selectedOutput, setSelectedOutput] = useState<string>("Default");
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [newlyPlacedId, setNewlyPlacedId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const [positions, setPositions] = useState<Record<string, GridPosition>>(() => {
     const saved = localStorage.getItem("module_positions_grid");
@@ -161,10 +162,13 @@ function App() {
     });
   }, [engineState?.modules]);
 
-  const handleDrag = (id: string, pos: GridPosition | null) => {
-    if (!pos) return;
+  const handleDrag = (id: string, pos: GridPosition | null, _rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => {
+    if (!pos) {
+      setDraggingId(null);
+      return;
+    }
+    setDraggingId(id);
 
-    // Recalculate scale in real-time based on the module's MOVING position
     const typeMap: Record<string, string> = {};
     engineState?.modules?.forEach(m => {
       typeMap[m.id] = m.config.type;
@@ -176,11 +180,18 @@ function App() {
     const maxGx = Math.max(MODULE_W_UNITS, Math.floor(availableWidthPx / GRID_UNIT_PX));
     const maxGy = Math.max(MODULE_H_UNITS, Math.floor(availableHeightPx / GRID_UNIT_PX));
 
-    const tempPositions = { ...positions, [id]: pos };
-    setScale(calculateScale(tempPositions, getH, maxGx, maxGy));
+    // Use continuous (raw) position for scale calculation to make it smooth
+    const tempPositions = { ...positions, [id]: continuousPos || pos };
+    const newScale = calculateScale(tempPositions, getH, maxGx, maxGy);
+
+    if (newScale !== scale) {
+      setScale(newScale);
+    }
   };
 
   const handlePositionChange = (id: string, pos: GridPosition) => {
+    setDraggingId(null);
+
     setPositions(prev => {
       const typeMap: Record<string, string> = {};
       engineState?.modules?.forEach(m => {
@@ -196,9 +207,35 @@ function App() {
       const next = { ...prev, [id]: pos };
       setScale(calculateScale(next, getH, maxGx, maxGy));
       localStorage.setItem("module_positions_grid", JSON.stringify(next));
+
       return next;
     });
   };
+
+  // Handle global clicks to close menu
+  useEffect(() => {
+    if (!showAddMenu) return;
+
+    const handleContext = (_e: MouseEvent) => {
+      setShowAddMenu(false);
+    };
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Close if click is outside the menu and not on the toggle button
+      if (!target.closest('.add-module-menu') && !target.closest('.add-btn')) {
+        setShowAddMenu(false);
+      }
+    };
+
+    window.addEventListener('contextmenu', handleContext);
+    window.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      window.removeEventListener('contextmenu', handleContext);
+      window.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showAddMenu]);
 
   const toggleEngine = () => {
     if (isRunning) {
@@ -240,7 +277,7 @@ function App() {
       position: 'relative' as const,
       transform: `scale(${scale})`,
       transformOrigin: 'top left',
-      transition: 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)',
+      transition: draggingId ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)',
     };
   };
 
@@ -395,7 +432,7 @@ function App() {
         <AddModuleMenu
           onAdd={(type) => {
             addModule(type);
-            setShowAddMenu(false);
+            // Don't close menu here
           }}
           onClose={() => setShowAddMenu(false)}
           existingTypes={(engineState?.modules || []).map(m => m.config.type)}

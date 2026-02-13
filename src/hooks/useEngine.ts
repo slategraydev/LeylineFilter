@@ -29,10 +29,10 @@ export function useEngine() {
   useEffect(() => {
     // --- Initialization ---
     invoke<string[]>("get_input_devices").then((d) =>
-      setInputDevices(["Default", ...d]),
+      setInputDevices(Array.from(new Set(["Default", ...d]))),
     );
     invoke<string[]>("get_output_devices").then((d) =>
-      setOutputDevices(["Default", ...d]),
+      setOutputDevices(Array.from(new Set(["Default", ...d]))),
     );
 
     // Initial state fetch

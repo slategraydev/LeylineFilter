@@ -15,10 +15,7 @@ impl VisualizerModule {
     }
 
     pub fn with_id(id: String) -> Self {
-        Self {
-            id,
-            enabled: true,
-        }
+        Self { id, enabled: false }
     }
 }
 
@@ -65,7 +62,7 @@ mod tests {
     fn test_visualizer_initialization() {
         let viz = VisualizerModule::new();
         assert_eq!(viz.name(), "Visualizer");
-        assert!(viz.enabled);
+        assert!(!viz.enabled);
     }
 
     #[test]
