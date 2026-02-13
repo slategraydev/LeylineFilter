@@ -7,11 +7,13 @@ interface ExpanderModuleProps {
   initialPosition: GridPosition;
   heightUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
+  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
   onHeightReport?: (id: string, units: number) => void;
   config: ExpanderConfig;
   onChange: (config: ExpanderConfig) => void;
   onRemove?: () => void;
   style?: React.CSSProperties;
+  isNewlyPlaced?: boolean;
 }
 
 export function ExpanderModule({
@@ -19,11 +21,13 @@ export function ExpanderModule({
   initialPosition,
   heightUnits,
   onPositionChange,
+  onDrag,
   onHeightReport,
   config,
   onChange,
   onRemove,
   style,
+  isNewlyPlaced,
 }: ExpanderModuleProps) {
   const updateConfig = (updates: Partial<ExpanderConfig>) => {
     onChange({ ...config, ...updates });
@@ -35,12 +39,14 @@ export function ExpanderModule({
       initialPosition={initialPosition}
       heightUnits={heightUnits}
       onPositionChange={onPositionChange}
+      onDrag={onDrag}
       onHeightReport={onHeightReport}
       title="Noise Expander"
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}
       onRemove={onRemove}
       style={style}
+      isNewlyPlaced={isNewlyPlaced}
     >
       <div className="control-group">
         <label>

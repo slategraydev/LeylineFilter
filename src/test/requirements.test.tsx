@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import App from "../App";
 
@@ -46,7 +46,9 @@ describe("Final Refinement Requirements", () => {
   });
 
   it("Requirement: AddModuleMenu stays open after adding an item", async () => {
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
     // Open menu
     const addBtn = screen.getByLabelText(/Add Module/i);
@@ -63,7 +65,9 @@ describe("Final Refinement Requirements", () => {
   });
 
   it("Requirement: Right-click ANYWHERE closes the AddModuleMenu", async () => {
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
     // Open menu
     fireEvent.click(screen.getByLabelText(/Add Module/i));
@@ -78,7 +82,9 @@ describe("Final Refinement Requirements", () => {
   });
 
   it("Requirement: Left-click outside closes the AddModuleMenu", async () => {
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
     // Open menu
     fireEvent.click(screen.getByLabelText(/Add Module/i));
@@ -93,7 +99,9 @@ describe("Final Refinement Requirements", () => {
   });
 
   it("Requirement: Flash ONLY happens for initial drop from menu", async () => {
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
     // Gain module is not newly placed
 

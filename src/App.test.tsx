@@ -1,62 +1,76 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, waitFor, act } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import App from "./App";
 
 // Mock Tauri invoke
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(async (cmd) => {
-    if (cmd === "get_input_devices") return ["Mic 1"];
-    if (cmd === "get_output_devices") return ["Speakers 1"];
-    if (cmd === "get_engine_state")
-      return {
-        modules: [
-          {
-            id: "expander-1",
-            name: "Expander",
-            category: "Dynamics",
-            enabled: true,
-            config: {
-              type: "Expander",
-              data: {
-                enabled: true,
-                threshold: 0.1,
-                ratio: 2.0,
-                attack_ms: 10,
-                release_ms: 100,
-              },
-            },
-          },
-        ],
-        is_running: false,
-        sample_rate: 48000,
-      };
-    if (cmd === "get_metrics")
-      return {
-        latency_ms: 10,
-        cpu_usage: 5,
-        input_level: 0.1,
-        spectrum: Array(12).fill(0.1),
-        tonality: Array(12).fill(0.1),
-        state_version: 0,
-      };
-    return {};
-  }),
+  invoke: vi.fn(),
 }));
 
 describe("App Smoke Test", () => {
+  const defaultState = {
+    modules: [
+      {
+        id: "expander-1",
+        name: "Expander",
+        category: "Dynamics",
+        enabled: true,
+        config: {
+          type: "Expander",
+          data: {
+            enabled: true,
+            threshold: 0.1,
+            ratio: 2.0,
+            attack_ms: 10,
+            release_ms: 100,
+          },
+        },
+      },
+    ],
+    is_running: false,
+    sample_rate: 48000,
+  };
+
+  const defaultMetrics = {
+    latency_ms: 10,
+    cpu_usage: 5,
+    input_level: 0.1,
+    spectrum: Array(12).fill(0.1),
+    tonality: Array(12).fill(0.1),
+    state_version: 0,
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(invoke).mockImplementation(async (cmd) => {
+      if (cmd === "get_input_devices") return ["Mic 1"];
+      if (cmd === "get_output_devices") return ["Speakers 1"];
+      if (cmd === "get_engine_state") return defaultState;
+      if (cmd === "get_metrics") return defaultMetrics;
+      return {};
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("renders without crashing", async () => {
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
     expect(screen.getByText(/LEYLINE/i)).toBeInTheDocument();
   });
 
   it("initializes with default expander settings", async () => {
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
     expect(await screen.findByText(/Noise Expander/i)).toBeInTheDocument();
   });
 
   it("displays 0 ms for latency when engine is not running", async () => {
-    // Mock latency_ms as -1 to simulate engine not running
     vi.mocked(invoke).mockImplementation(async (cmd) => {
       if (cmd === "get_input_devices") return ["Mic 1"];
       if (cmd === "get_output_devices") return ["Speakers 1"];
@@ -64,24 +78,25 @@ describe("App Smoke Test", () => {
         return { modules: [], is_running: false, sample_rate: 48000 };
       if (cmd === "get_metrics") {
         return {
+          ...defaultMetrics,
           latency_ms: 0,
-          cpu_usage: 2,
-          input_level: 0,
-          spectrum: Array(12).fill(0),
-          tonality: Array(12).fill(0),
-          state_version: 0,
         };
       }
       return {};
     });
 
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
+
     const latencyDisplay = await screen.findByTestId("latency-value");
-    expect(latencyDisplay).toHaveTextContent("0 ms");
+    await waitFor(() => expect(latencyDisplay).toHaveTextContent("0 ms"));
   });
 
-  it("renders the engine toggle button", () => {
-    render(<App />);
+  it("renders the engine toggle button", async () => {
+    await act(async () => {
+      render(<App />);
+    });
     expect(screen.getByText(/Start Engine/i)).toBeInTheDocument();
   });
 
@@ -89,19 +104,20 @@ describe("App Smoke Test", () => {
     vi.mocked(invoke).mockImplementation(async (cmd) => {
       if (cmd === "get_input_devices") return ["Mic 1"];
       if (cmd === "get_output_devices") return ["Speakers 1"];
+      if (cmd === "get_engine_state") return defaultState;
       if (cmd === "get_metrics") {
         return {
+          ...defaultMetrics,
           latency_ms: 10.7,
-          cpu_usage: 5,
-          input_level: 0,
-          spectrum: Array(12).fill(0),
-          tonality: Array(12).fill(0),
         };
       }
       return {};
     });
 
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
+
     const latencyDisplay = await screen.findByTestId("latency-value");
     await waitFor(() => expect(latencyDisplay).toHaveTextContent("11 ms"));
   });

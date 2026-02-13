@@ -7,12 +7,14 @@ interface RNNoiseModuleProps {
   initialPosition: GridPosition;
   heightUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
+  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
   onHeightReport?: (id: string, units: number) => void;
   title?: string;
   config: RNNoiseConfig;
   onChange: (config: RNNoiseConfig) => void;
   onRemove?: () => void;
   style?: React.CSSProperties;
+  isNewlyPlaced?: boolean;
 }
 
 export function RNNoiseModule({
@@ -20,12 +22,14 @@ export function RNNoiseModule({
   initialPosition,
   heightUnits,
   onPositionChange,
+  onDrag,
   onHeightReport,
   title = "Noise Suppression",
   config,
   onChange,
   onRemove,
   style,
+  isNewlyPlaced,
 }: RNNoiseModuleProps) {
   const updateConfig = (updates: Partial<RNNoiseConfig>) => {
     onChange({ ...config, ...updates });
@@ -37,12 +41,14 @@ export function RNNoiseModule({
       initialPosition={initialPosition}
       heightUnits={heightUnits}
       onPositionChange={onPositionChange}
+      onDrag={onDrag}
       onHeightReport={onHeightReport}
       title={title}
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}
       onRemove={onRemove}
       style={style}
+      isNewlyPlaced={isNewlyPlaced}
     >
       <div className="control-group">
         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>

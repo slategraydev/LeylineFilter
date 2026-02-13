@@ -7,11 +7,13 @@ interface FilterModuleProps {
   initialPosition: GridPosition;
   heightUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
+  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
   onHeightReport?: (id: string, units: number) => void;
   config: FilterConfig;
   onChange: (config: FilterConfig) => void;
   onRemove?: () => void;
   style?: React.CSSProperties;
+  isNewlyPlaced?: boolean;
 }
 
 export function FilterModule({
@@ -19,11 +21,13 @@ export function FilterModule({
   initialPosition,
   heightUnits,
   onPositionChange,
+  onDrag,
   onHeightReport,
   config,
   onChange,
   onRemove,
   style,
+  isNewlyPlaced,
 }: FilterModuleProps) {
   const updateConfig = (updates: Partial<FilterConfig>) => {
     onChange({ ...config, ...updates });
@@ -35,12 +39,14 @@ export function FilterModule({
       initialPosition={initialPosition}
       heightUnits={heightUnits}
       onPositionChange={onPositionChange}
+      onDrag={onDrag}
       onHeightReport={onHeightReport}
       title="Audio Filter"
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}
       onRemove={onRemove}
       style={style}
+      isNewlyPlaced={isNewlyPlaced}
     >
       <div className="control-group">
         <label>

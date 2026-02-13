@@ -49,6 +49,7 @@ function App() {
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [newlyPlacedId, setNewlyPlacedId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [draggingPos, setDraggingPos] = useState<GridPosition | null>(null);
 
   const [positions, setPositions] = useState<Record<string, GridPosition>>(() => {
     const saved = localStorage.getItem("module_positions_grid");
@@ -165,9 +166,12 @@ function App() {
   const handleDrag = (id: string, pos: GridPosition | null, _rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => {
     if (!pos) {
       setDraggingId(null);
+      setDraggingPos(null);
       return;
     }
     setDraggingId(id);
+    const currentDraggingPos = continuousPos || pos;
+    setDraggingPos(currentDraggingPos);
 
     const typeMap: Record<string, string> = {};
     engineState?.modules?.forEach(m => {
@@ -181,7 +185,7 @@ function App() {
     const maxGy = Math.max(MODULE_H_UNITS, Math.floor(availableHeightPx / GRID_UNIT_PX));
 
     // Use continuous (raw) position for scale calculation to make it smooth
-    const tempPositions = { ...positions, [id]: continuousPos || pos };
+    const tempPositions = { ...positions, [id]: currentDraggingPos };
     const newScale = calculateScale(tempPositions, getH, maxGx, maxGy);
 
     if (newScale !== scale) {
@@ -191,6 +195,7 @@ function App() {
 
   const handlePositionChange = (id: string, pos: GridPosition) => {
     setDraggingId(null);
+    setDraggingPos(null);
 
     setPositions(prev => {
       const typeMap: Record<string, string> = {};
@@ -265,10 +270,11 @@ function App() {
     engineState?.modules?.forEach(m => { typeMap[m.id] = m.config.type; });
 
     Object.entries(positions).forEach(([id, pos]) => {
+      const effectivePos = (id === draggingId && draggingPos) ? draggingPos : pos;
       const mType = typeMap[id] || "default";
       const mHeight = moduleHeights[id] || MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
-      maxGx = Math.max(maxGx, pos.gx + MODULE_W_UNITS);
-      maxGy = Math.max(maxGy, pos.gy + mHeight);
+      maxGx = Math.max(maxGx, effectivePos.gx + MODULE_W_UNITS);
+      maxGy = Math.max(maxGy, effectivePos.gy + mHeight);
     });
 
     return {

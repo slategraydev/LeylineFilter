@@ -8,11 +8,13 @@ interface Props {
   initialPosition: GridPosition;
   heightUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
+  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
   onHeightReport?: (id: string, units: number) => void;
   config: GainConfig;
   onChange: (config: GainConfig) => void;
   onRemove?: () => void;
   style?: React.CSSProperties;
+  isNewlyPlaced?: boolean;
 }
 
 export const GainModule: React.FC<Props> = ({
@@ -20,11 +22,13 @@ export const GainModule: React.FC<Props> = ({
   initialPosition,
   heightUnits,
   onPositionChange,
+  onDrag,
   onHeightReport,
   config,
   onChange,
   onRemove,
   style,
+  isNewlyPlaced,
 }) => {
   const updateConfig = (updates: Partial<GainConfig>) => {
     onChange({ ...config, ...updates });
@@ -36,12 +40,14 @@ export const GainModule: React.FC<Props> = ({
       initialPosition={initialPosition}
       heightUnits={heightUnits}
       onPositionChange={onPositionChange}
+      onDrag={onDrag}
       onHeightReport={onHeightReport}
       title="Master Gain"
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}
       onRemove={onRemove}
       style={style}
+      isNewlyPlaced={isNewlyPlaced}
     >
       <div className="control-group">
         <label>

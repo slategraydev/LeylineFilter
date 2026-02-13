@@ -26,20 +26,25 @@
 
 /* Newly placed pulse (once, longer) */
 .module-card.newly-placed {
-    animation: flash-border 1.2s ease-in-out;
+    animation: flash-border 1.5s ease-out;
     z-index: 50;
     transition: opacity 0.4s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.3s ease !important;
 }
 
 @keyframes flash-border {
-
-    0%,
-    100% {
-        border-color: var(--color-border);
+    0% {
+        border-color: #ff0000;
+        box-shadow: 0 0 0px rgba(255, 0, 0, 0);
     }
 
-    50% {
-        border-color: var(--color-accent);
+    30% {
+        border-color: #ff3333;
+        box-shadow: 0 0 20px rgba(255, 0, 0, 0.6);
+    }
+
+    100% {
+        border-color: var(--color-border);
+        box-shadow: 0 0 0px rgba(255, 0, 0, 0);
     }
 }
 
@@ -48,19 +53,24 @@
 }
 
 .module-card.active.newly-placed {
-    animation: flash-border-active 1.2s ease-in-out;
+    animation: flash-border-active 1.5s ease-out;
     transition: opacity 0.4s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.3s ease !important;
 }
 
 @keyframes flash-border-active {
-
-    0%,
-    100% {
-        border-color: #333;
+    0% {
+        border-color: #ff0000;
+        box-shadow: 0 0 0px rgba(255, 0, 0, 0);
     }
 
-    50% {
-        border-color: var(--color-accent);
+    30% {
+        border-color: #ff3333;
+        box-shadow: 0 0 20px rgba(255, 0, 0, 0.6);
+    }
+
+    100% {
+        border-color: #333;
+        box-shadow: 0 0 0px rgba(255, 0, 0, 0);
     }
 }
 

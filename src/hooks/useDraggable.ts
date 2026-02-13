@@ -25,6 +25,7 @@ export function useDraggable(
 
   // We store the grab point in local (scaled) space relative to the module's initial top-left.
   const grabPointLocal = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
+  const startScale = useRef<number>(1.0);
 
   // Use a ref for scale to avoid closure staleness during dragging
   const scaleRef = useRef(scale);
@@ -60,13 +61,11 @@ export function useDraggable(
 
     setIsDragging(true);
     startGridPos.current = initialGridPosition;
+    startScale.current = scaleRef.current;
 
-    // Calculate where on the module we clicked in local scaled units
-    // mouseX_local = mouseX_screen / scale
-    // initialX_local = startGridPos.gx * GRID_UNIT_PX
-    // grabPointX = mouseX_local - initialX_local
-    const mouseXLocal = e.clientX / scaleRef.current;
-    const mouseYLocal = e.clientY / scaleRef.current;
+    // Calculate where on the module we clicked in local scaled units at the START scale
+    const mouseXLocal = e.clientX / startScale.current;
+    const mouseYLocal = e.clientY / startScale.current;
 
     grabPointLocal.current = {
       x: mouseXLocal - (initialGridPosition.gx * GRID_UNIT_PX),
@@ -81,16 +80,14 @@ export function useDraggable(
     if (!isDragging) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      // Calculate where the module top-left should be in local scaled space
-      // so that the grabPoint stays under the current mouse position.
-      // currentX_local = (mouseX_screen / current_scale) - grabPointX
-      const mouseXLocal = e.clientX / scaleRef.current;
-      const mouseYLocal = e.clientY / scaleRef.current;
+      // Calculate where the module top-left should be in local space using START scale
+      // This keeps the mouse "stuck" to the same pixel on the module.
+      const mouseXLocal = e.clientX / startScale.current;
+      const mouseYLocal = e.clientY / startScale.current;
 
       const targetXLocal = mouseXLocal - grabPointLocal.current.x;
       const targetYLocal = mouseYLocal - grabPointLocal.current.y;
 
-      // The offset is the difference from the STARTING position
       const startXLocal = startGridPos.current.gx * GRID_UNIT_PX;
       const startYLocal = startGridPos.current.gy * GRID_UNIT_PX;
 
@@ -101,7 +98,7 @@ export function useDraggable(
 
       setDragOffset(nextOffset);
 
-      // Calculate logical grid positions
+      // Logical grid positions should always be relative to the BASE units (non-scaled)
       const continuousGx = targetXLocal / GRID_UNIT_PX;
       const continuousGy = targetYLocal / GRID_UNIT_PX;
 

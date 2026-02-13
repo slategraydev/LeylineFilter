@@ -9,6 +9,7 @@ interface VisualizerModuleProps {
   initialPosition: GridPosition;
   heightUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
+  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
   onHeightReport?: (id: string, units: number) => void;
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
@@ -17,6 +18,7 @@ interface VisualizerModuleProps {
   spectrum: number[];
   tonality: number[];
   style?: React.CSSProperties;
+  isNewlyPlaced?: boolean;
 }
 
 /**
@@ -28,6 +30,7 @@ export function VisualizerModule({
   initialPosition,
   heightUnits,
   onPositionChange,
+  onDrag,
   onHeightReport,
   enabled,
   onToggle,
@@ -36,6 +39,7 @@ export function VisualizerModule({
   spectrum,
   tonality,
   style,
+  isNewlyPlaced,
 }: VisualizerModuleProps) {
   return (
     <BaseModule
@@ -43,6 +47,7 @@ export function VisualizerModule({
       initialPosition={initialPosition}
       heightUnits={heightUnits}
       onPositionChange={onPositionChange}
+      onDrag={onDrag}
       onHeightReport={onHeightReport}
       title="Spectrum Analyzer"
       enabled={enabled}
@@ -50,6 +55,7 @@ export function VisualizerModule({
       onRemove={onRemove}
       hideToggle={false} // Allow disabling it if desired
       style={style}
+      isNewlyPlaced={isNewlyPlaced}
     >
       <div style={{ flex: 1, minHeight: '120px', marginTop: '4px' }}>
         <Visualizer
