@@ -46,9 +46,13 @@ export function LeylineLogo() {
  * much easier to style/responsively layout than a fixed-size canvas.
  */
 export function Visualizer({ isRunning, spectrum, tonality }: VisualizerProps) {
+  // Ensure we have arrays to work with to prevent crashes
+  const safeSpectrum = Array.isArray(spectrum) ? spectrum : Array(12).fill(0);
+  const safeTonality = Array.isArray(tonality) ? tonality : Array(12).fill(0);
+
   const bars = [...Array(12)].map((_, i) => {
-    const binValue = spectrum[i] || 0;
-    const binTonality = tonality[i] || 0;
+    const binValue = safeSpectrum[i] || 0;
+    const binTonality = safeTonality[i] || 0;
     // binValue is already normalized 0.0 to 1.0 (-60dB to 0dB)
     const height = isRunning ? binValue * 100 : 0;
 

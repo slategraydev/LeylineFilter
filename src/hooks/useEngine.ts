@@ -28,11 +28,13 @@ export function useEngine() {
 
   useEffect(() => {
     // --- Initialization ---
+    // This only runs once on mount to populate the device lists
+    // and fetch the initial engine state.
     invoke<string[]>("get_input_devices").then((d) =>
-      setInputDevices(["Default", ...d]),
+      setInputDevices(Array.from(new Set(["Default", ...d]))),
     );
     invoke<string[]>("get_output_devices").then((d) =>
-      setOutputDevices(["Default", ...d]),
+      setOutputDevices(Array.from(new Set(["Default", ...d]))),
     );
 
     // Initial state fetch
@@ -40,7 +42,9 @@ export function useEngine() {
       setEngineState(state);
       setIsRunning(state.is_running);
     });
+  }, []);
 
+  useEffect(() => {
     /**
      * ## High-Frequency Polling
      * We poll metrics every 33ms (~30fps) instead of using events.
@@ -50,18 +54,32 @@ export function useEngine() {
     const interval = setInterval(async () => {
       try {
         const m = await invoke<EngineMetrics & { state_version: number }>("get_metrics");
-        setMetrics(m);
+
+        // Comprehensive safety check for every property
+        const safeMetrics: EngineMetrics = {
+          latency_ms: m?.latency_ms ?? 0,
+          cpu_usage: m?.cpu_usage ?? 0,
+          input_level: m?.input_level ?? 0,
+          buffer_size: m?.buffer_size ?? 256,
+          spectrum: Array.isArray(m?.spectrum) ? m.spectrum : Array(12).fill(0),
+          tonality: Array.isArray(m?.tonality) ? m.tonality : Array(12).fill(0),
+          state_version: m?.state_version ?? 0,
+        };
+
+        setMetrics(safeMetrics);
 
         /**
          * ## Efficient State Sync
          * We only fetch the full EngineState (which can be large) if the backend
          * reports a version change (e.g., a module was added or removed).
          */
-        if (m.state_version !== lastVersion) {
+        if (safeMetrics.state_version !== lastVersion) {
           const state = await invoke<EngineState>("get_engine_state");
-          setEngineState(state);
-          setIsRunning(state.is_running);
-          setLastVersion(m.state_version);
+          if (state) {
+            setEngineState(state);
+            setIsRunning(state.is_running ?? false);
+            setLastVersion(safeMetrics.state_version);
+          }
         }
       } catch (e) {
         // Silently fail if backend not ready (e.g. app closing)
@@ -94,6 +112,32 @@ export function useEngine() {
     setIsRunning(false);
   };
 
+  const addModule = async (moduleType: string) => {
+    try {
+      await invoke("send_command", {
+        command: {
+          type: "AddModule",
+          data: { module_type: moduleType }
+        }
+      });
+    } catch (e) {
+      console.error("Failed to add module:", e);
+    }
+  };
+
+  const removeModule = async (id: string) => {
+    try {
+      await invoke("send_command", {
+        command: {
+          type: "RemoveModule",
+          data: { id }
+        }
+      });
+    } catch (e) {
+      console.error("Failed to remove module:", e);
+    }
+  };
+
   return {
     isRunning,
     inputDevices,
@@ -102,5 +146,7 @@ export function useEngine() {
     metrics,
     startEngine,
     stopEngine,
+    addModule,
+    removeModule,
   };
 }

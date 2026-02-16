@@ -1,26 +1,64 @@
 import { FilterConfig } from "../../types";
 import { BaseModule } from "./BaseModule";
+import { GridPosition } from "../../hooks/useDraggable";
 
 interface FilterModuleProps {
+  id: string;
+  initialPosition: GridPosition;
+  heightUnits: number;
+  widthUnits: number;
+  onPositionChange: (id: string, pos: GridPosition) => void;
+  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
+  onHeightReport?: (id: string, units: number) => void;
+  onWidthReport?: (id: string, units: number) => void;
   config: FilterConfig;
   onChange: (config: FilterConfig) => void;
+  onRemove?: () => void;
+  style?: React.CSSProperties;
+  isNewlyPlaced?: boolean;
 }
 
-export function FilterModule({ config, onChange }: FilterModuleProps) {
+export function FilterModule({
+  id,
+  initialPosition,
+  heightUnits,
+  widthUnits,
+  onPositionChange,
+  onDrag,
+  onHeightReport,
+  onWidthReport,
+  config,
+  onChange,
+  onRemove,
+  style,
+  isNewlyPlaced,
+}: FilterModuleProps) {
   const updateConfig = (updates: Partial<FilterConfig>) => {
     onChange({ ...config, ...updates });
   };
 
   return (
     <BaseModule
+      id={id}
+      initialPosition={initialPosition}
+      heightUnits={heightUnits}
+      widthUnits={widthUnits}
+      onPositionChange={onPositionChange}
+      onDrag={onDrag}
+      onHeightReport={onHeightReport}
+      onWidthReport={onWidthReport}
       title="Audio Filter"
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}
+      onRemove={onRemove}
+      style={style}
+      isNewlyPlaced={isNewlyPlaced}
     >
       <div className="control-group">
         <label>
           Type
           <select
+            className="custom-select"
             value={config.filter_type}
             disabled={!config.enabled}
             onChange={(e) =>

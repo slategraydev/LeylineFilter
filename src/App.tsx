@@ -8,21 +8,28 @@ import { RNNoiseModule } from "./components/Modules/RNNoiseModule";
 import { GainModule } from "./components/Modules/GainModule";
 import { FilterModule } from "./components/Modules/FilterModule";
 import { VisualizerModule } from "./components/Modules/VisualizerModule";
+import { AddModuleMenu } from "./components/Engine/AddModuleMenu";
 import { EngineControls } from "./components/Engine/EngineControls";
 import {
   ExpanderConfig,
   RNNoiseConfig,
   GainConfig,
   FilterConfig,
-  VisualizerConfig,
+  ModuleConfig,
 } from "./types";
+import { GridPosition } from "./hooks/useDraggable";
+import { findFreeSlot } from "./utils/layout";
+import {
+  GRID_UNIT_PX,
+  SIDEBAR_WIDTH_PX,
+  MODULE_W_UNITS,
+  MODULE_H_UNITS,
+  MODULE_HEIGHTS
+} from "./constants";
 import "./App.css";
 
 /**
  * # Main Application Component
- * This component serves as the root state container for the UI.
- * It manages the local configuration state (persistence via localStorage)
- * and synchronizes with the backend via the useEngine hook.
  */
 function App() {
   const {
@@ -33,151 +40,186 @@ function App() {
     metrics,
     startEngine,
     stopEngine,
+    addModule,
+    removeModule,
   } = useEngine();
 
   const [selectedInput, setSelectedInput] = useState<string>("Default");
   const [selectedOutput, setSelectedOutput] = useState<string>("Default");
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const [newlyPlacedIds, setNewlyPlacedIds] = useState<Set<string>>(new Set());
+  const [expectingNewModule, setExpectingNewModule] = useState(false);
+  const [newlyAddedModuleIds, setNewlyAddedModuleIds] = useState<string[]>([]);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [draggingPos, setDraggingPos] = useState<GridPosition | null>(null);
 
-  /**
-   * ## Local State & Persistence
-   * Configuration is stored locally in React state for immediate UI responsiveness
-   * and synced to the backend via useEffect hooks.
-   */
-  const [gainConfig, setGainConfig] = useState<GainConfig>(() => {
-    const defaults = { enabled: true, gain_db: 0.0 };
-    const saved = localStorage.getItem("gain_config");
+  const [positions, setPositions] = useState<Record<string, GridPosition>>(() => {
+    const saved = localStorage.getItem("module_positions_grid");
     if (saved) {
       try {
-        return { ...defaults, ...JSON.parse(saved) };
+        return JSON.parse(saved);
       } catch (e) {
-        console.error(e);
+        console.error("Failed to parse module positions", e);
       }
     }
-    return defaults;
+    return {};
   });
 
-  const [expanderConfig, setExpanderConfig] = useState<ExpanderConfig>(() => {
-    const defaults = {
-      enabled: true,
-      threshold: 0.08,
-      ratio: 2.0,
-      attack_ms: 10.0,
-      release_ms: 100.0,
+  const [moduleHeights, setModuleHeights] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem("module_heights_grid");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse module heights", e);
+      }
+    }
+    return {};
+  });
+
+  const [moduleWidths, setModuleWidths] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem("module_widths_grid");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse module widths", e);
+      }
+    }
+    return {};
+  });
+
+  // Helper to find the next empty slot in the grid (used only for NEW modules)
+  const findNextAvailableSlot = (currentPositions: Record<string, GridPosition>, type: string): GridPosition => {
+    const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
+    const maxGx = Math.max(MODULE_W_UNITS, Math.floor(availableWidthPx / GRID_UNIT_PX));
+
+    const typeMap: Record<string, string> = {};
+    engineState?.modules?.forEach(m => { typeMap[m.id] = m.config.type; });
+    const getH = (mid: string) => moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || "default"] || MODULE_H_UNITS;
+    const getW = (mid: string) => moduleWidths[mid] || MODULE_W_UNITS;
+
+    return findFreeSlot(MODULE_HEIGHTS[type] || MODULE_H_UNITS, currentPositions, getH, getW, maxGx);
+  };
+
+  // Sync positions when new modules appear
+  useEffect(() => {
+    if (!engineState) return;
+
+    setPositions(prev => {
+      let changed = false;
+      let addedIds: string[] = [];
+      const next = { ...prev };
+
+      const currentIds = new Set((engineState.modules || []).map(m => m.id));
+      Object.keys(next).forEach(id => {
+        if (!currentIds.has(id)) {
+          delete next[id];
+          changed = true;
+        }
+      });
+
+      engineState.modules?.forEach(m => {
+        if (!next[m.id]) {
+          const nextSlot = findNextAvailableSlot(next, m.config.type);
+          next[m.id] = nextSlot;
+          addedIds.push(m.id);
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        localStorage.setItem("module_positions_grid", JSON.stringify(next));
+        if (addedIds.length > 0) {
+          setNewlyAddedModuleIds(prevIds => [...prevIds, ...addedIds]);
+        }
+        return next;
+      }
+      return prev;
+    });
+  }, [engineState?.modules]);
+
+  // Handle flash animation side-effects
+  useEffect(() => {
+    if (newlyAddedModuleIds.length > 0) {
+      if (expectingNewModule) {
+        setNewlyPlacedIds(prev => {
+          const nextSet = new Set(prev);
+          newlyAddedModuleIds.forEach(id => nextSet.add(id));
+          return nextSet;
+        });
+
+        // Set individual timeouts for each added module
+        newlyAddedModuleIds.forEach(id => {
+          setTimeout(() => {
+            setNewlyPlacedIds(prev => {
+              const nextSet = new Set(prev);
+              nextSet.delete(id);
+              return nextSet;
+            });
+          }, 1000);
+        });
+      }
+      setExpectingNewModule(false);
+      setNewlyAddedModuleIds([]);
+    }
+  }, [newlyAddedModuleIds, expectingNewModule]);
+
+  const handleDrag = (_id: string, pos: GridPosition | null, _rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => {
+    if (!pos) {
+      setDraggingId(null);
+      setDraggingPos(null);
+      return;
+    }
+    setDraggingId(_id);
+    const currentDraggingPos = continuousPos || pos;
+    setDraggingPos(currentDraggingPos);
+  };
+
+  const handlePositionChange = (id: string, pos: GridPosition) => {
+    setDraggingId(null);
+    setDraggingPos(null);
+
+    setPositions(prev => {
+      const next = { ...prev, [id]: pos };
+      localStorage.setItem("module_positions_grid", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  // Handle global clicks to close menu
+  useEffect(() => {
+    if (!showAddMenu) return;
+
+    const handleContext = (_e: MouseEvent) => {
+      setShowAddMenu(false);
     };
 
-    const saved = localStorage.getItem("expander_config");
-    if (saved) {
-      try {
-        return { ...defaults, ...JSON.parse(saved) };
-      } catch (e) {
-        console.error("Failed to parse saved config", e);
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Close if click is outside the menu and not on the toggle button
+      if (!target.closest('.add-module-menu') && !target.closest('.add-btn')) {
+        setShowAddMenu(false);
       }
-    }
-    return defaults;
-  });
-
-  const [rnnoiseConfig, setRnnoiseConfig] = useState<RNNoiseConfig>(() => {
-    const defaults = {
-      enabled: false,
     };
 
-    const saved = localStorage.getItem("rnnoise_config");
-    if (saved) {
-      try {
-        return { ...defaults, ...JSON.parse(saved) };
-      } catch (e) {
-        console.error("Failed to parse saved config", e);
-      }
-    }
-    return defaults;
-  });
+    window.addEventListener('contextmenu', handleContext);
+    window.addEventListener('mousedown', handleClickOutside);
 
-  const [filterConfig, setFilterConfig] = useState<FilterConfig>(() => {
-    const defaults: FilterConfig = {
-      enabled: false,
-      filter_type: "LPF",
-      frequency: 1000,
-      q: 0.707,
+    return () => {
+      window.removeEventListener('contextmenu', handleContext);
+      window.removeEventListener('mousedown', handleClickOutside);
     };
+  }, [showAddMenu]);
 
-    const saved = localStorage.getItem("filter_config");
-    if (saved) {
-      try {
-        return { ...defaults, ...JSON.parse(saved) };
-      } catch (e) {
-        console.error("Failed to parse saved config", e);
-      }
-    }
-    return defaults;
-  });
+  const addModuleFromMenu = async (moduleType: string) => {
+    setExpectingNewModule(true);
+    addModule(moduleType);
+  };
 
-  const [visualizerConfig, setVisualizerConfig] = useState<VisualizerConfig>(() => {
-    const defaults = { enabled: true };
-    const saved = localStorage.getItem("visualizer_config");
-    if (saved) {
-      try {
-        return { ...defaults, ...JSON.parse(saved) };
-      } catch (e) {
-        console.error("Failed to parse saved config", e);
-      }
-    }
-    return defaults;
-  });
-
-  /**
-   * ## Config Synchronization
-   * We sync to the backend whenever config changes.
-   * Note: The backend handles parameter smoothing, so rapid updates are safe.
-   */
-  useEffect(() => {
-    localStorage.setItem("gain_config", JSON.stringify(gainConfig));
-    invoke("update_config", {
-      config: {
-        type: "Gain",
-        data: gainConfig,
-      },
-    });
-  }, [gainConfig]);
-
-  useEffect(() => {
-    localStorage.setItem("expander_config", JSON.stringify(expanderConfig));
-    invoke("update_config", {
-      config: {
-        type: "Expander",
-        data: expanderConfig,
-      },
-    });
-  }, [expanderConfig]);
-
-  useEffect(() => {
-    localStorage.setItem("rnnoise_config", JSON.stringify(rnnoiseConfig));
-    invoke("update_config", {
-      config: {
-        type: "RNNoise",
-        data: rnnoiseConfig,
-      },
-    });
-  }, [rnnoiseConfig]);
-
-  useEffect(() => {
-    localStorage.setItem("filter_config", JSON.stringify(filterConfig));
-    invoke("update_config", {
-      config: {
-        type: "Filter",
-        data: filterConfig,
-      },
-    });
-  }, [filterConfig]);
-
-  useEffect(() => {
-    localStorage.setItem("visualizer_config", JSON.stringify(visualizerConfig));
-    invoke("update_config", {
-      config: {
-        type: "Visualizer",
-        data: visualizerConfig,
-      },
-    });
-  }, [visualizerConfig]);
+  const removeModuleFromGrid = async (id: string) => {
+    removeModule(id);
+  };
 
   const toggleEngine = () => {
     if (isRunning) {
@@ -185,6 +227,138 @@ function App() {
     } else {
       startEngine(selectedInput, selectedOutput);
     }
+  };
+
+  const handleUpdateConfig = (_id: string, config: ModuleConfig) => {
+    invoke("update_config", { config });
+  };
+
+  const handleHeightReport = (id: string, units: number) => {
+    setModuleHeights(prev => {
+      if (prev[id] === units) return prev;
+      const nextHeights = { ...prev, [id]: units };
+      localStorage.setItem("module_heights_grid", JSON.stringify(nextHeights));
+      return nextHeights;
+    });
+  };
+
+  const getGridContentStyle = () => {
+    let maxGx = 0;
+    let maxGy = 0;
+    const typeMap: Record<string, string> = {};
+    engineState?.modules?.forEach(m => { typeMap[m.id] = m.config.type; });
+
+    Object.entries(positions).forEach(([id, pos]) => {
+      const effectivePos = (id === draggingId && draggingPos) ? draggingPos : pos;
+      const mType = typeMap[id] || "default";
+      const mHeight = moduleHeights[id] || MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
+      const mWidth = moduleWidths[id] || MODULE_W_UNITS;
+      maxGx = Math.max(maxGx, effectivePos.gx + mWidth);
+      maxGy = Math.max(maxGy, effectivePos.gy + mHeight);
+    });
+
+    const effectiveGridUnit = GRID_UNIT_PX || 18;
+
+    return {
+      minWidth: '100%',
+      minHeight: '100vh',
+      width: maxGx > 0 ? `calc(var(--grid-unit) * ${maxGx + 5})` : '100%',
+      height: maxGy > 0 ? `calc(var(--grid-unit) * ${maxGy + 10})` : '100%',
+      position: 'relative' as const,
+      '--grid-unit': `${effectiveGridUnit}px`,
+      transition: 'width 0.2s ease, height 0.2s ease',
+    } as React.CSSProperties;
+  };
+
+  const renderModule = (module: any) => {
+    const pos = positions[module.id];
+    if (!pos) return null;
+
+    const config = module.config;
+    if (!config || !config.data) return null;
+
+    const mHeight = moduleHeights[module.id] || MODULE_HEIGHTS[config.type] || MODULE_H_UNITS;
+    const mWidth = moduleWidths[module.id] || MODULE_W_UNITS;
+
+    const commonProps = {
+      id: module.id,
+      initialPosition: pos,
+      heightUnits: mHeight,
+      widthUnits: mWidth,
+      onPositionChange: handlePositionChange,
+      onDrag: handleDrag,
+      onHeightReport: handleHeightReport,
+      onWidthReport: (id: string, units: number) => {
+        setModuleWidths(prev => {
+          if (prev[id] === units) return prev;
+          const next = { ...prev, [id]: units };
+          localStorage.setItem("module_widths_grid", JSON.stringify(next));
+          return next;
+        });
+      },
+      onRemove: () => removeModuleFromGrid(module.id),
+      isNewlyPlaced: newlyPlacedIds.has(module.id),
+    };
+
+    let moduleComponent = null;
+
+    switch (config.type) {
+      case "Gain":
+        moduleComponent = (
+          <GainModule
+            key={module.id}
+            {...commonProps}
+            config={config.data as GainConfig}
+            onChange={(data) => handleUpdateConfig(module.id, { type: "Gain", data })}
+          />
+        );
+        break;
+      case "Expander":
+        moduleComponent = (
+          <ExpanderModule
+            key={module.id}
+            {...commonProps}
+            config={config.data as ExpanderConfig}
+            onChange={(data) => handleUpdateConfig(module.id, { type: "Expander", data })}
+          />
+        );
+        break;
+      case "RNNoise":
+        moduleComponent = (
+          <RNNoiseModule
+            key={module.id}
+            {...commonProps}
+            config={config.data as RNNoiseConfig}
+            onChange={(data) => handleUpdateConfig(module.id, { type: "RNNoise", data })}
+          />
+        );
+        break;
+      case "Filter":
+        moduleComponent = (
+          <FilterModule
+            key={module.id}
+            {...commonProps}
+            config={config.data as FilterConfig}
+            onChange={(data) => handleUpdateConfig(module.id, { type: "Filter", data })}
+          />
+        );
+        break;
+      case "Visualizer":
+        moduleComponent = (
+          <VisualizerModule
+            key={module.id}
+            {...commonProps}
+            enabled={config.data.enabled}
+            onToggle={(enabled) => handleUpdateConfig(module.id, { type: "Visualizer", data: { enabled } })}
+            isRunning={isRunning}
+            spectrum={metrics.spectrum}
+            tonality={metrics.tonality}
+          />
+        );
+        break;
+    }
+
+    return moduleComponent;
   };
 
   return (
@@ -198,9 +372,6 @@ function App() {
         </header>
 
         <div className="sidebar-section">
-          <div className="section-label">
-            <span>I/O Config</span>
-          </div>
           <EngineControls
             isRunning={isRunning}
             inputDevices={inputDevices}
@@ -213,9 +384,6 @@ function App() {
         </div>
 
         <div className="sidebar-section">
-          <div className="section-label">
-            <span>System Telemetry</span>
-          </div>
           <div className="metrics-panel">
             <div className="metric">
               <label>Latency</label>
@@ -249,40 +417,38 @@ function App() {
       </aside>
 
       <main className="module-grid">
-        <VisualizerModule
-          enabled={visualizerConfig.enabled}
-          onToggle={(enabled) => setVisualizerConfig({ enabled })}
-          isRunning={isRunning}
-          spectrum={metrics.spectrum}
-          tonality={metrics.tonality}
-        />
-        <GainModule
-          config={gainConfig}
-          onChange={setGainConfig}
-        />
-        <RNNoiseModule
-          config={rnnoiseConfig}
-          onChange={setRnnoiseConfig}
-        />
-        <ExpanderModule
-          config={expanderConfig}
-          onChange={setExpanderConfig}
-        />
-        <FilterModule
-          config={filterConfig}
-          onChange={setFilterConfig}
-        />
-
-        {/* Placeholder for future modules */}
-        <div className="module-card placeholder">
-          <button className="add-btn" aria-label="Add Module">
-            <svg viewBox="0 0 24 24" className="add-icon">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
+        <div className="grid-inner" style={getGridContentStyle()}>
+          {engineState?.modules?.map(m => {
+            try {
+              return renderModule(m);
+            } catch (e) {
+              console.error(`Failed to render module ${m.id}:`, e);
+              return null;
+            }
+          })}
         </div>
       </main>
+
+      {showAddMenu && (
+        <AddModuleMenu
+          onAdd={addModuleFromMenu}
+          onClose={() => setShowAddMenu(false)}
+          existingTypes={(engineState?.modules || []).map(m => m.config.type)}
+        />
+      )}
+
+      <div className="module-card placeholder">
+        <button
+          className="add-btn"
+          aria-label="Add Module"
+          onClick={() => setShowAddMenu(!showAddMenu)}
+        >
+          <svg viewBox="0 0 24 24" className="add-icon">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

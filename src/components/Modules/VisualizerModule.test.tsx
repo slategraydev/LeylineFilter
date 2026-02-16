@@ -6,6 +6,12 @@ import { VisualizerModule } from './VisualizerModule';
 
 describe('VisualizerModule', () => {
   const defaultProps = {
+    id: "test-viz",
+    initialPosition: { gx: 1, gy: 1 },
+    heightUnits: 16,
+    widthUnits: 18,
+    onPositionChange: () => { },
+    onHeightReport: () => { },
     enabled: true,
     onToggle: vi.fn(),
     isRunning: true,

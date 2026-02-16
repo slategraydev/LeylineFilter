@@ -7,14 +7,23 @@ describe('RNNoiseModule', () => {
     enabled: true,
   };
 
+  const defaultProps = {
+    id: "test-rnnoise",
+    initialPosition: { gx: 1, gy: 1 },
+    heightUnits: 11,
+    widthUnits: 18,
+    onPositionChange: () => { },
+    onHeightReport: () => { },
+  };
+
   it('renders correctly with default config', () => {
-    render(<RNNoiseModule config={defaultConfig} onChange={() => { }} />);
+    render(<RNNoiseModule {...defaultProps} config={defaultConfig} onChange={() => { }} />);
     expect(screen.getByText(/Noise Suppression/i)).toBeInTheDocument();
   });
 
   it('toggles enabled state', () => {
     const onChange = vi.fn();
-    render(<RNNoiseModule config={defaultConfig} onChange={onChange} />);
+    render(<RNNoiseModule {...defaultProps} config={defaultConfig} onChange={onChange} />);
 
     // BaseModule renders a checkbox for enabling/disabling
     const checkbox = screen.getByRole('checkbox');
@@ -26,7 +35,7 @@ describe('RNNoiseModule', () => {
   });
 
   it('displays description text', () => {
-    render(<RNNoiseModule config={defaultConfig} onChange={() => { }} />);
+    render(<RNNoiseModule {...defaultProps} config={defaultConfig} onChange={() => { }} />);
     expect(screen.getByText(/Recurrent Neural Networks/i)).toBeInTheDocument();
   });
 });

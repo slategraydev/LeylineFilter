@@ -2,13 +2,25 @@
 
 import { BaseModule } from './BaseModule';
 import { Visualizer } from '../Visualizer/Visualizer';
+import { GridPosition } from '../../hooks/useDraggable';
 
 interface VisualizerModuleProps {
+  id: string;
+  initialPosition: GridPosition;
+  heightUnits: number;
+  widthUnits: number;
+  onPositionChange: (id: string, pos: GridPosition) => void;
+  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
+  onHeightReport?: (id: string, units: number) => void;
+  onWidthReport?: (id: string, units: number) => void;
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
+  onRemove?: () => void;
   isRunning: boolean;
   spectrum: number[];
   tonality: number[];
+  style?: React.CSSProperties;
+  isNewlyPlaced?: boolean;
 }
 
 /**
@@ -16,20 +28,42 @@ interface VisualizerModuleProps {
  * Wraps the Visualizer component in a BaseModule to fit in the module grid.
  */
 export function VisualizerModule({
+  id,
+  initialPosition,
+  heightUnits,
+  widthUnits,
+  onPositionChange,
+  onDrag,
+  onHeightReport,
+  onWidthReport,
   enabled,
   onToggle,
+  onRemove,
   isRunning,
   spectrum,
-  tonality
+  tonality,
+  style,
+  isNewlyPlaced,
 }: VisualizerModuleProps) {
   return (
     <BaseModule
+      id={id}
+      initialPosition={initialPosition}
+      heightUnits={heightUnits}
+      widthUnits={widthUnits}
+      onPositionChange={onPositionChange}
+      onDrag={onDrag}
+      onHeightReport={onHeightReport}
+      onWidthReport={onWidthReport}
       title="Spectrum Analyzer"
       enabled={enabled}
       onToggle={onToggle}
+      onRemove={onRemove}
       hideToggle={false} // Allow disabling it if desired
+      style={style}
+      isNewlyPlaced={isNewlyPlaced}
     >
-      <div style={{ height: '140px', marginTop: '10px' }}>
+      <div style={{ height: '7em', marginTop: '4px' }}>
         <Visualizer
           isRunning={isRunning && enabled}
           spectrum={spectrum}
