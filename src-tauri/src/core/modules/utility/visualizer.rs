@@ -11,10 +11,11 @@ pub struct VisualizerModule {
 
 impl VisualizerModule {
     pub fn new() -> Self {
-        Self {
-            id: Uuid::new_v4().to_string(),
-            enabled: true,
-        }
+        Self::with_id(Uuid::new_v4().to_string())
+    }
+
+    pub fn with_id(id: String) -> Self {
+        Self { id, enabled: false }
     }
 }
 
@@ -61,7 +62,7 @@ mod tests {
     fn test_visualizer_initialization() {
         let viz = VisualizerModule::new();
         assert_eq!(viz.name(), "Visualizer");
-        assert!(viz.enabled);
+        assert!(!viz.enabled);
     }
 
     #[test]

@@ -35,9 +35,16 @@ impl ModuleFactory {
         }
     }
 
-    /// Returns a list of all available module types.
-    pub fn available_types() -> Vec<&'static str> {
-        vec!["Gain", "Expander", "RNNoise", "Filter", "Visualizer"]
+    /// Creates a new audio module instance with a specific ID.
+    pub fn create_with_id(module_type: &str, id: String, sample_rate: f32) -> Option<Box<dyn AudioModule>> {
+        match module_type {
+            "Gain" => Some(Box::new(GainModule::with_id(id, sample_rate))),
+            "Expander" => Some(Box::new(ExpanderModule::with_id(id, sample_rate))),
+            "RNNoise" => Some(Box::new(RNNoiseModule::with_id(id, sample_rate))),
+            "Filter" => Some(Box::new(BiquadModule::with_id(id, sample_rate))),
+            "Visualizer" => Some(Box::new(VisualizerModule::with_id(id))),
+            _ => None,
+        }
     }
 }
 
@@ -65,14 +72,5 @@ mod tests {
 
         let unknown = ModuleFactory::create("Unknown", 48000.0);
         assert!(unknown.is_none());
-    }
-
-    #[test]
-    fn test_available_types() {
-        let types = ModuleFactory::available_types();
-        assert!(types.contains(&"Gain"));
-        assert!(types.contains(&"Expander"));
-        assert!(types.contains(&"RNNoise"));
-        assert!(types.contains(&"Filter"));
     }
 }

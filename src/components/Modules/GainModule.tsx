@@ -1,22 +1,59 @@
 import React from "react";
 import { GainConfig } from "../../types";
 import { BaseModule } from "./BaseModule";
+import { GridPosition } from "../../hooks/useDraggable";
 
 interface Props {
+  id: string;
+  initialPosition: GridPosition;
+  heightUnits: number;
+  widthUnits: number;
+  onPositionChange: (id: string, pos: GridPosition) => void;
+  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
+  onHeightReport?: (id: string, units: number) => void;
+  onWidthReport?: (id: string, units: number) => void;
   config: GainConfig;
   onChange: (config: GainConfig) => void;
+  onRemove?: () => void;
+  style?: React.CSSProperties;
+  isNewlyPlaced?: boolean;
 }
 
-export const GainModule: React.FC<Props> = ({ config, onChange }) => {
+export const GainModule: React.FC<Props> = ({
+  id,
+  initialPosition,
+  heightUnits,
+  widthUnits,
+  onPositionChange,
+  onDrag,
+  onHeightReport,
+  onWidthReport,
+  config,
+  onChange,
+  onRemove,
+  style,
+  isNewlyPlaced,
+}) => {
   const updateConfig = (updates: Partial<GainConfig>) => {
     onChange({ ...config, ...updates });
   };
 
   return (
     <BaseModule
+      id={id}
+      initialPosition={initialPosition}
+      heightUnits={heightUnits}
+      widthUnits={widthUnits}
+      onPositionChange={onPositionChange}
+      onDrag={onDrag}
+      onHeightReport={onHeightReport}
+      onWidthReport={onWidthReport}
       title="Master Gain"
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}
+      onRemove={onRemove}
+      style={style}
+      isNewlyPlaced={isNewlyPlaced}
     >
       <div className="control-group">
         <label>

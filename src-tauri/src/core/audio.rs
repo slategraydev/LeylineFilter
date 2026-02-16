@@ -137,6 +137,8 @@ pub struct AudioEngine {
     vis_running: Arc<AtomicBool>,
     // Garbage Collection for Audio Thread
     garbage_rx: Option<Receiver<Box<dyn AudioModule>>>,
+    // Persistent chain for offline management
+    offline_chain: Arc<Mutex<SignalChain>>,
 }
 
 impl AudioEngine {
@@ -159,6 +161,8 @@ impl AudioEngine {
         } else {
             (48000.0, 256)
         };
+
+        let offline_chain = Arc::new(Mutex::new(SignalChain::new(initial_sr)));
 
         Self {
             input_stream: None,
@@ -185,6 +189,7 @@ impl AudioEngine {
             vis_thread: None,
             vis_running: Arc::new(AtomicBool::new(false)),
             garbage_rx: None,
+            offline_chain,
         }
     }
 
@@ -247,7 +252,7 @@ impl AudioEngine {
     }
 
     pub fn send_command(&self, command: EngineCommand) {
-        // Track persistence
+        // Track persistence in module_configs (legacy, but keeping for now)
         match &command {
             EngineCommand::UpdateConfig(config) => {
                 let type_name = match config {
@@ -265,6 +270,37 @@ impl AudioEngine {
                 }
             }
             _ => {}
+        }
+
+        // Apply to offline chain (Always keep in sync)
+        if let Ok(mut offline) = self.offline_chain.lock() {
+            match &command {
+                EngineCommand::UpdateConfig(c) => offline.update_config(c),
+                EngineCommand::AddModule { module_type } => {
+                    if let Some(m) = ModuleFactory::create(module_type, self.internal_sample_rate) {
+                        offline.add_module(m);
+                    }
+                }
+                EngineCommand::RemoveModule { id } => {
+                    offline.remove_module(id);
+                }
+                EngineCommand::SetParam { id, param, value } => {
+                    offline.update_module_param(id, param, *value);
+                }
+                EngineCommand::Reorder { order } => {
+                    offline.reorder(order);
+                }
+                _ => {}
+            }
+
+            // If engine is NOT running, sync state back to UI immediately.
+            // If running, the audio thread will sync state back.
+            if !self.is_running() {
+                if let Ok(mut state_lock) = self.chain_state.lock() {
+                    *state_lock = offline.get_state(false, self.buffer_size);
+                    self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
+                }
+            }
         }
 
         // Translate public EngineCommand to InternalEngineCommand
@@ -398,10 +434,14 @@ impl AudioEngine {
         let mut internal_sample_rate = self.sample_rate;
         let mut chain = SignalChain::new(internal_sample_rate);
 
-        // Initial population of modules
-        for module_type in ModuleFactory::available_types() {
-            if let Some(m) = ModuleFactory::create(module_type, internal_sample_rate) {
-                chain.add_module(m);
+        // Populate from offline chain
+        if let Ok(offline) = self.offline_chain.lock() {
+            for m_info in offline.get_state(false, 0).modules {
+                // Use the module's name and original ID to re-create it
+                if let Some(mut m) = ModuleFactory::create_with_id(&m_info.name, m_info.id, internal_sample_rate) {
+                    m.update_config(&m_info.config);
+                    chain.add_module(m);
+                }
             }
         }
 
