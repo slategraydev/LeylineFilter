@@ -23,9 +23,9 @@ export function useDraggable(
   const [dragOffset, setDragOffset] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
 
-  // We store the grab point in local (scaled) space relative to the module's initial top-left.
+  // We store the grab point in LOCAL units relative to the module's top-left.
+  // This is scale-invariant.
   const grabPointLocal = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
-  const startScale = useRef<number>(1.0);
 
   // Use a ref for scale to avoid closure staleness during dragging
   const scaleRef = useRef(scale);
@@ -44,7 +44,7 @@ export function useDraggable(
     }
   }, [initialGridPosition, isDragging]);
 
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
 
     const target = e.target as HTMLElement;
@@ -59,19 +59,30 @@ export function useDraggable(
       return;
     }
 
+    // Find the grid origin (grid-inner) to calculate local coordinates
+    const gridInner = target.closest('.grid-inner');
+    if (!gridInner) return;
+
     setIsDragging(true);
     startGridPos.current = initialGridPosition;
-    startScale.current = scaleRef.current;
 
-    // Calculate where on the module we clicked in local scaled units at the START scale
-    const mouseXLocal = e.clientX / startScale.current;
-    const mouseYLocal = e.clientY / startScale.current;
+    // Capture the pointer to keep receiving events even if the mouse leaves the window
+    if ((e.currentTarget as HTMLElement).setPointerCapture) {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    }
 
+    const rect = gridInner.getBoundingClientRect();
+    const gridUnit = parseFloat((gridInner as HTMLElement).style.getPropertyValue('--grid-unit')) || GRID_UNIT_PX;
+
+    // Calculate where on the module we clicked in logical grid units
+    const mouseXLocal = (e.clientX - rect.left) / gridUnit;
+    const mouseYLocal = (e.clientY - rect.top) / gridUnit;
+
+    // grabOffset_units = mouseX_local_units - moduleLeft_units
     grabPointLocal.current = {
-      x: mouseXLocal - (initialGridPosition.gx * GRID_UNIT_PX),
-      y: mouseYLocal - (initialGridPosition.gy * GRID_UNIT_PX)
+      x: mouseXLocal - initialGridPosition.gx,
+      y: mouseYLocal - initialGridPosition.gy
     };
-
     if (onDragStart) onDragStart();
     e.preventDefault();
   }, [initialGridPosition]);
@@ -79,28 +90,34 @@ export function useDraggable(
   useEffect(() => {
     if (!isDragging) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
-      // Calculate where the module top-left should be in local space using START scale
-      // This keeps the mouse "stuck" to the same pixel on the module.
-      const mouseXLocal = e.clientX / startScale.current;
-      const mouseYLocal = e.clientY / startScale.current;
+    const handlePointerMove = (e: PointerEvent) => {
+      const moduleElement = document.querySelector(`[data-dragging="true"]`) || (e.target as HTMLElement).closest('.module-card');
+      const gridInner = moduleElement?.closest('.grid-inner') as HTMLElement;
+      if (!gridInner) return;
 
-      const targetXLocal = mouseXLocal - grabPointLocal.current.x;
-      const targetYLocal = mouseYLocal - grabPointLocal.current.y;
+      const rect = gridInner.getBoundingClientRect();
+      const gridUnit = parseFloat(gridInner.style.getPropertyValue('--grid-unit')) || GRID_UNIT_PX;
 
-      const startXLocal = startGridPos.current.gx * GRID_UNIT_PX;
-      const startYLocal = startGridPos.current.gy * GRID_UNIT_PX;
+      // Calculate where the module top-left should be in PIXELS relative to the grid origin
+      // so that the grab point (in pixels) stays under the current mouse position.
+      const targetXPixel = (e.clientX - rect.left) - grabPointLocal.current.x * gridUnit;
+      const targetYPixel = (e.clientY - rect.top) - grabPointLocal.current.y * gridUnit;
 
+      const startXPixel = startGridPos.current.gx * gridUnit;
+      const startYPixel = startGridPos.current.gy * gridUnit;
+
+      // The offset is the difference from the STARTING position in "logical" pixels (where 1 logical pixel = 1/gridUnit units)
+      // but actually it's easier to just report the logical units directly to App.
       const nextOffset = {
-        x: targetXLocal - startXLocal,
-        y: targetYLocal - startYLocal
+        x: (targetXPixel - startXPixel) / gridUnit * GRID_UNIT_PX,
+        y: (targetYPixel - startYPixel) / gridUnit * GRID_UNIT_PX
       };
 
       setDragOffset(nextOffset);
 
-      // Logical grid positions should always be relative to the BASE units (non-scaled)
-      const continuousGx = targetXLocal / GRID_UNIT_PX;
-      const continuousGy = targetYLocal / GRID_UNIT_PX;
+      // Logical grid positions
+      const continuousGx = targetXPixel / gridUnit;
+      const continuousGy = targetYPixel / gridUnit;
 
       const snappedGx = Math.max(0, Math.round(continuousGx));
       const snappedGy = Math.max(0, Math.round(continuousGy));
@@ -115,25 +132,27 @@ export function useDraggable(
       }
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       setIsDragging(false);
       if (onDragEnd) {
         onDragEnd(currentGridPos.current);
       }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [isDragging, onDrag, onDragEnd]);
 
   return {
     dragOffset,
     isDragging,
-    onMouseDown,
+    onPointerDown,
   };
 }

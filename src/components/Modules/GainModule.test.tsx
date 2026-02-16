@@ -12,6 +12,7 @@ describe('GainModule', () => {
     id: "test-gain",
     initialPosition: { gx: 1, gy: 1 },
     heightUnits: 12,
+    widthUnits: 18,
     onPositionChange: () => { },
     onHeightReport: () => { },
   };

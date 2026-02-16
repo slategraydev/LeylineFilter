@@ -15,6 +15,7 @@ describe('ExpanderModule', () => {
     id: "test-expander",
     initialPosition: { gx: 1, gy: 1 },
     heightUnits: 32,
+    widthUnits: 18,
     onPositionChange: () => { },
     onHeightReport: () => { },
   };

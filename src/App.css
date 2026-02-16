@@ -140,6 +140,10 @@ body {
     font-weight: 700;
 }
 
+.selector:nth-child(2) {
+    margin-top: 8px;
+}
+
 .selector select {
     width: 100%;
 }
@@ -239,35 +243,41 @@ body {
 
 /* --- Main Rack Area --- */
 .module-grid {
-    /* More visible grid */
+    background-color: #030303;
+    padding: 0;
+    overflow: auto;
+    position: relative;
+    flex-grow: 1;
+    height: 100%;
+    /* Fill the container height */
+    min-height: 0;
+}
+
+.grid-inner {
     --grid-unit: 18px;
+    /* Default overridden by inline style */
     --color-border-grid: rgba(255, 255, 255, 0.035);
 
     background-image:
         linear-gradient(var(--color-border-grid) 1px, transparent 1px),
         linear-gradient(90deg, var(--color-border-grid) 1px, transparent 1px);
     background-size: var(--grid-unit) var(--grid-unit);
-    background-color: #030303;
+    background-repeat: repeat;
+    /* Ensure it tiles infinitely */
 
-    padding: 0;
-    overflow: auto;
     position: relative;
-    flex-grow: 1;
-    min-height: 0;
-    transition: background-color 0.3s ease;
+    min-width: 100%;
+    min-height: 100%;
+    /* Force grid to fill the entire scrollable area */
+
+    /* This is the key: set font-size based on grid unit */
+    font-size: calc(var(--grid-unit) * 0.9);
 }
 
 .module-card.dragging {
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
     cursor: grabbing;
     filter: brightness(1.2);
-}
-
-
-.grid-inner {
-    position: relative;
-    min-width: 100%;
-    min-height: 100%;
 }
 
 .sidebar-footer {
@@ -284,7 +294,7 @@ body {
 }
 
 .visualizer-container {
-    height: 120px;
+    height: 7em;
     background: transparent;
     border-radius: 0;
     position: relative;
@@ -300,23 +310,23 @@ body {
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    gap: 2px;
+    gap: 0.15em;
     height: 100%;
     width: 100%;
 }
 
 .wave-bar {
-    width: 4px;
-    min-height: 2px;
+    width: 0.25em;
+    min-height: 0.15em;
     background: var(--color-accent);
     border-radius: 1px;
 }
 
 .status-overlay {
     position: absolute;
-    bottom: 5px;
-    right: 10px;
-    font-size: 0.6rem;
+    bottom: 0.3em;
+    right: 0.6em;
+    font-size: 0.5em;
     font-weight: 900;
     color: #444;
 }
@@ -332,8 +342,8 @@ body {
 }
 
 .leyline-svg {
-    width: 65px;
-    height: 65px;
+    width: 4em;
+    height: 4em;
 }
 
 .filter-diamond {
@@ -395,19 +405,18 @@ body {
     background: black;
     border: 1px solid var(--color-border);
     color: var(--color-text-main);
-    padding: 8px 30px 8px 8px;
-    /* Added right padding for the arrow */
+    padding: 0.5em 2em 0.5em 0.5em;
     border-radius: 0;
     font-family: var(--font-mono);
-    font-size: 0.9rem;
+    font-size: 0.9em;
     font-weight: 500;
     cursor: pointer;
     transition: border-color 0.2s;
     appearance: none;
-    /* Remove default arrow */
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23888' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: calc(100% - 10px) center;
+    background-position: calc(100% - 0.6em) center;
+    background-size: 0.8em;
 }
 
 
@@ -418,7 +427,6 @@ body {
 .custom-select:focus {
     outline: none;
     border-color: #444;
-    /* Keep it neutral instead of red */
 }
 
 .custom-select:disabled {
@@ -432,13 +440,13 @@ input[type="range"] {
     height: 2px;
     background: #333;
     outline: none;
-    margin: 20px 0;
+    margin: 1.2em 0;
 }
 
 input[type="range"]::-webkit-slider-thumb {
     appearance: none;
-    width: 14px;
-    height: 14px;
+    width: 0.9em;
+    height: 0.9em;
     background: var(--color-text-main);
     cursor: pointer;
     border: 1px solid black;

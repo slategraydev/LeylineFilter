@@ -33,6 +33,10 @@ export function AddModuleMenu({ onAdd, onClose, existingTypes }: AddModuleMenuPr
               className="menu-item"
               onClick={() => {
                 onAdd(item.type);
+                // If this was the last item in the list, close the menu
+                if (filteredTypes.indexOf(item) === filteredTypes.length - 1) {
+                  onClose();
+                }
               }}
             >
               {item.label}

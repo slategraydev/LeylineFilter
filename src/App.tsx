@@ -18,7 +18,7 @@ import {
   ModuleConfig,
 } from "./types";
 import { GridPosition } from "./hooks/useDraggable";
-import { findFreeSlot, calculateScale } from "./utils/layout";
+import { findFreeSlot } from "./utils/layout";
 import {
   GRID_UNIT_PX,
   SIDEBAR_WIDTH_PX,
@@ -47,7 +47,9 @@ function App() {
   const [selectedInput, setSelectedInput] = useState<string>("Default");
   const [selectedOutput, setSelectedOutput] = useState<string>("Default");
   const [showAddMenu, setShowAddMenu] = useState(false);
-  const [newlyPlacedId, setNewlyPlacedId] = useState<string | null>(null);
+  const [newlyPlacedIds, setNewlyPlacedIds] = useState<Set<string>>(new Set());
+  const [expectingNewModule, setExpectingNewModule] = useState(false);
+  const [newlyAddedModuleIds, setNewlyAddedModuleIds] = useState<string[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingPos, setDraggingPos] = useState<GridPosition | null>(null);
 
@@ -63,8 +65,6 @@ function App() {
     return {};
   });
 
-  const [scale, setScale] = useState(1.0);
-
   const [moduleHeights, setModuleHeights] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem("module_heights_grid");
     if (saved) {
@@ -72,6 +72,18 @@ function App() {
         return JSON.parse(saved);
       } catch (e) {
         console.error("Failed to parse module heights", e);
+      }
+    }
+    return {};
+  });
+
+  const [moduleWidths, setModuleWidths] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem("module_widths_grid");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse module widths", e);
       }
     }
     return {};
@@ -85,33 +97,10 @@ function App() {
     const typeMap: Record<string, string> = {};
     engineState?.modules?.forEach(m => { typeMap[m.id] = m.config.type; });
     const getH = (mid: string) => moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || "default"] || MODULE_H_UNITS;
+    const getW = (mid: string) => moduleWidths[mid] || MODULE_W_UNITS;
 
-    return findFreeSlot(MODULE_HEIGHTS[type] || MODULE_H_UNITS, currentPositions, getH, maxGx);
+    return findFreeSlot(MODULE_HEIGHTS[type] || MODULE_H_UNITS, currentPositions, getH, getW, maxGx);
   };
-
-  // Sync scale when window is resized
-  useEffect(() => {
-    const handleResize = () => {
-      setPositions(prev => {
-        if (Object.keys(prev).length === 0) return prev;
-
-        const typeMap: Record<string, string> = {};
-        engineState?.modules?.forEach(m => { typeMap[m.id] = m.config.type; });
-        const getH = (mid: string) => moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || "default"] || MODULE_H_UNITS;
-
-        const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
-        const availableHeightPx = window.innerHeight - 20;
-        const maxGx = Math.max(MODULE_W_UNITS, Math.floor(availableWidthPx / GRID_UNIT_PX));
-        const maxGy = Math.max(MODULE_H_UNITS, Math.floor(availableHeightPx / GRID_UNIT_PX));
-
-        setScale(calculateScale(prev, getH, maxGx, maxGy));
-        return prev;
-      });
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [engineState?.modules, moduleHeights]);
 
   // Sync positions when new modules appear
   useEffect(() => {
@@ -119,7 +108,7 @@ function App() {
 
     setPositions(prev => {
       let changed = false;
-      let newIdToFlash: string | null = null;
+      let addedIds: string[] = [];
       const next = { ...prev };
 
       const currentIds = new Set((engineState.modules || []).map(m => m.id));
@@ -134,63 +123,57 @@ function App() {
         if (!next[m.id]) {
           const nextSlot = findNextAvailableSlot(next, m.config.type);
           next[m.id] = nextSlot;
-          newIdToFlash = m.id;
+          addedIds.push(m.id);
           changed = true;
         }
       });
 
       if (changed) {
-        const typeMap: Record<string, string> = {};
-        engineState.modules.forEach(m => { typeMap[m.id] = m.config.type; });
-        const getH = (mid: string) => moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || "default"] || MODULE_H_UNITS;
-
-        const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
-        const availableHeightPx = window.innerHeight - 20;
-        const maxGx = Math.max(MODULE_W_UNITS, Math.floor(availableWidthPx / GRID_UNIT_PX));
-        const maxGy = Math.max(MODULE_H_UNITS, Math.floor(availableHeightPx / GRID_UNIT_PX));
-
-        setScale(calculateScale(next, getH, maxGx, maxGy));
         localStorage.setItem("module_positions_grid", JSON.stringify(next));
-
-        if (newIdToFlash) {
-          setNewlyPlacedId(newIdToFlash);
-          setTimeout(() => setNewlyPlacedId(null), 2000);
+        if (addedIds.length > 0) {
+          setNewlyAddedModuleIds(prevIds => [...prevIds, ...addedIds]);
         }
-
         return next;
       }
       return prev;
     });
   }, [engineState?.modules]);
 
-  const handleDrag = (id: string, pos: GridPosition | null, _rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => {
+  // Handle flash animation side-effects
+  useEffect(() => {
+    if (newlyAddedModuleIds.length > 0) {
+      if (expectingNewModule) {
+        setNewlyPlacedIds(prev => {
+          const nextSet = new Set(prev);
+          newlyAddedModuleIds.forEach(id => nextSet.add(id));
+          return nextSet;
+        });
+
+        // Set individual timeouts for each added module
+        newlyAddedModuleIds.forEach(id => {
+          setTimeout(() => {
+            setNewlyPlacedIds(prev => {
+              const nextSet = new Set(prev);
+              nextSet.delete(id);
+              return nextSet;
+            });
+          }, 1000);
+        });
+      }
+      setExpectingNewModule(false);
+      setNewlyAddedModuleIds([]);
+    }
+  }, [newlyAddedModuleIds, expectingNewModule]);
+
+  const handleDrag = (_id: string, pos: GridPosition | null, _rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => {
     if (!pos) {
       setDraggingId(null);
       setDraggingPos(null);
       return;
     }
-    setDraggingId(id);
+    setDraggingId(_id);
     const currentDraggingPos = continuousPos || pos;
     setDraggingPos(currentDraggingPos);
-
-    const typeMap: Record<string, string> = {};
-    engineState?.modules?.forEach(m => {
-      typeMap[m.id] = m.config.type;
-    });
-    const getH = (mid: string) => moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || "default"] || MODULE_H_UNITS;
-
-    const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
-    const availableHeightPx = window.innerHeight - 20;
-    const maxGx = Math.max(MODULE_W_UNITS, Math.floor(availableWidthPx / GRID_UNIT_PX));
-    const maxGy = Math.max(MODULE_H_UNITS, Math.floor(availableHeightPx / GRID_UNIT_PX));
-
-    // Use continuous (raw) position for scale calculation to make it smooth
-    const tempPositions = { ...positions, [id]: currentDraggingPos };
-    const newScale = calculateScale(tempPositions, getH, maxGx, maxGy);
-
-    if (newScale !== scale) {
-      setScale(newScale);
-    }
   };
 
   const handlePositionChange = (id: string, pos: GridPosition) => {
@@ -198,21 +181,8 @@ function App() {
     setDraggingPos(null);
 
     setPositions(prev => {
-      const typeMap: Record<string, string> = {};
-      engineState?.modules?.forEach(m => {
-        typeMap[m.id] = m.config.type;
-      });
-      const getH = (mid: string) => moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || "default"] || MODULE_H_UNITS;
-
-      const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
-      const availableHeightPx = window.innerHeight - 20;
-      const maxGx = Math.max(MODULE_W_UNITS, Math.floor(availableWidthPx / GRID_UNIT_PX));
-      const maxGy = Math.max(MODULE_H_UNITS, Math.floor(availableHeightPx / GRID_UNIT_PX));
-
       const next = { ...prev, [id]: pos };
-      setScale(calculateScale(next, getH, maxGx, maxGy));
       localStorage.setItem("module_positions_grid", JSON.stringify(next));
-
       return next;
     });
   };
@@ -241,6 +211,15 @@ function App() {
       window.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showAddMenu]);
+
+  const addModuleFromMenu = async (moduleType: string) => {
+    setExpectingNewModule(true);
+    addModule(moduleType);
+  };
+
+  const removeModuleFromGrid = async (id: string) => {
+    removeModule(id);
+  };
 
   const toggleEngine = () => {
     if (isRunning) {
@@ -273,18 +252,22 @@ function App() {
       const effectivePos = (id === draggingId && draggingPos) ? draggingPos : pos;
       const mType = typeMap[id] || "default";
       const mHeight = moduleHeights[id] || MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
-      maxGx = Math.max(maxGx, effectivePos.gx + MODULE_W_UNITS);
+      const mWidth = moduleWidths[id] || MODULE_W_UNITS;
+      maxGx = Math.max(maxGx, effectivePos.gx + mWidth);
       maxGy = Math.max(maxGy, effectivePos.gy + mHeight);
     });
 
+    const effectiveGridUnit = GRID_UNIT_PX || 18;
+
     return {
-      minWidth: `${maxGx * GRID_UNIT_PX + 20}px`,
-      minHeight: `${maxGy * GRID_UNIT_PX + 20}px`,
+      minWidth: '100%',
+      minHeight: '100vh',
+      width: maxGx > 0 ? `calc(var(--grid-unit) * ${maxGx + 5})` : '100%',
+      height: maxGy > 0 ? `calc(var(--grid-unit) * ${maxGy + 10})` : '100%',
       position: 'relative' as const,
-      transform: `scale(${scale})`,
-      transformOrigin: 'top left',
-      transition: draggingId ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)',
-    };
+      '--grid-unit': `${effectiveGridUnit}px`,
+      transition: 'width 0.2s ease, height 0.2s ease',
+    } as React.CSSProperties;
   };
 
   const renderModule = (module: any) => {
@@ -292,18 +275,29 @@ function App() {
     if (!pos) return null;
 
     const config = module.config;
+    if (!config || !config.data) return null;
+
     const mHeight = moduleHeights[module.id] || MODULE_HEIGHTS[config.type] || MODULE_H_UNITS;
+    const mWidth = moduleWidths[module.id] || MODULE_W_UNITS;
 
     const commonProps = {
       id: module.id,
       initialPosition: pos,
       heightUnits: mHeight,
-      scale: scale,
+      widthUnits: mWidth,
       onPositionChange: handlePositionChange,
       onDrag: handleDrag,
       onHeightReport: handleHeightReport,
-      onRemove: () => removeModule(module.id),
-      isNewlyPlaced: newlyPlacedId === module.id,
+      onWidthReport: (id: string, units: number) => {
+        setModuleWidths(prev => {
+          if (prev[id] === units) return prev;
+          const next = { ...prev, [id]: units };
+          localStorage.setItem("module_widths_grid", JSON.stringify(next));
+          return next;
+        });
+      },
+      onRemove: () => removeModuleFromGrid(module.id),
+      isNewlyPlaced: newlyPlacedIds.has(module.id),
     };
 
     let moduleComponent = null;
@@ -378,9 +372,6 @@ function App() {
         </header>
 
         <div className="sidebar-section">
-          <div className="section-label">
-            <span>I/O Config</span>
-          </div>
           <EngineControls
             isRunning={isRunning}
             inputDevices={inputDevices}
@@ -393,9 +384,6 @@ function App() {
         </div>
 
         <div className="sidebar-section">
-          <div className="section-label">
-            <span>System Telemetry</span>
-          </div>
           <div className="metrics-panel">
             <div className="metric">
               <label>Latency</label>
@@ -430,16 +418,20 @@ function App() {
 
       <main className="module-grid">
         <div className="grid-inner" style={getGridContentStyle()}>
-          {engineState?.modules?.map(renderModule)}
+          {engineState?.modules?.map(m => {
+            try {
+              return renderModule(m);
+            } catch (e) {
+              console.error(`Failed to render module ${m.id}:`, e);
+              return null;
+            }
+          })}
         </div>
       </main>
 
       {showAddMenu && (
         <AddModuleMenu
-          onAdd={(type) => {
-            addModule(type);
-            // Don't close menu here
-          }}
+          onAdd={addModuleFromMenu}
           onClose={() => setShowAddMenu(false)}
           existingTypes={(engineState?.modules || []).map(m => m.config.type)}
         />

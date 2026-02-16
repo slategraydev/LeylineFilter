@@ -10,3 +10,9 @@ class ResizeObserverMock {
 }
 
 vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+// Mock setPointerCapture/releasePointerCapture for JSDOM
+if (typeof Element !== 'undefined' && !Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = vi.fn();
+  Element.prototype.releasePointerCapture = vi.fn();
+}

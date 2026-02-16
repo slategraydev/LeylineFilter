@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import App from "../App";
 import { invoke } from "@tauri-apps/api/core";
@@ -37,8 +37,16 @@ describe("UI Behavior Tests", () => {
     });
   });
 
-  it("applies newly-placed class when a new module is added", async () => {
+  it("applies newly-placed class when a new module is added from menu", async () => {
     render(<App />);
+
+    // Open menu and click Gain
+    const addBtn = screen.getByLabelText(/Add Module/i);
+    fireEvent.click(addBtn);
+    const gainItem = screen.getByText(/Gain Control/i);
+
+    // Clicking this calls addModuleFromMenu which sets expectingNewModule = true
+    fireEvent.click(gainItem);
 
     // Mock engine state with a new module
     const stateWithModule = {
@@ -59,21 +67,16 @@ describe("UI Behavior Tests", () => {
       return {};
     });
 
-    // Wait for the polling interval (33ms) to trigger update
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 100));
-    });
-
-    // Need to trigger re-render or wait for it
-    // RTL's act and waitFor should handle this if polling is working
-
-    // Check if the module is rendered and has the class
+    // Wait for the polling interval (33ms) to trigger update and for newlyPlacedId to be set
     const module = await screen.findByText(/Master Gain/i);
     const moduleCard = module.closest(".module-card");
-    expect(moduleCard).toHaveClass("newly-placed");
+
+    await waitFor(() => {
+      expect(moduleCard).toHaveClass("newly-placed");
+    }, { timeout: 2000 });
   });
 
-  it("scales the grid in real-time during drag", async () => {
+  it("allows manual resizing of modules", async () => {
     const { container } = render(<App />);
 
     // Initial state with one module
@@ -99,47 +102,39 @@ describe("UI Behavior Tests", () => {
       await new Promise((r) => setTimeout(r, 100));
     });
 
-    const gridInner = container.querySelector(".grid-inner") as HTMLElement;
-    const initialWidth = parseInt(gridInner.style.minWidth);
+    const moduleCard = container.querySelector(".module-card") as HTMLElement;
 
-    // Simulate drag by finding the module and triggering onDrag
-    // Since we are testing App.tsx, we can find the BaseModule through its props if we were using a shallow render,
-    // but here we are doing a full render. We need to trigger the dragging logic.
+    const resizeHandle = container.querySelector(".resize-handle") as HTMLElement;
 
-    // Actually, we can find the module header and simulate mouse events,
-    // which will trigger useDraggable -> onDrag -> handleDrag in App.
-
-    const header = container.querySelector(".module-header") as HTMLElement;
-
-    // Mock window.innerWidth/Height to ensure we know the boundaries
-    vi.stubGlobal('innerWidth', 1000);
-
-    await act(async () => {      // Start drag
-      const mouseDownEvent = new MouseEvent('mousedown', {
+    await act(async () => {
+      // Start resize
+      const pointerDownEvent = new PointerEvent('pointerdown', {
         bubbles: true,
         button: 0,
-        clientX: 18, // Match initial gx=1 * 18
-        clientY: 18
+        pointerId: 2,
+        clientX: 340 + 18 * 18, // Roughly the bottom right of initial gx=1 module
+        clientY: 18 * 10
       });
-      header.dispatchEvent(mouseDownEvent);
+      resizeHandle.dispatchEvent(pointerDownEvent);
     });
 
     await act(async () => {
-      // Move mouse to a far position that should grow the grid
-      const mouseMoveEvent = new MouseEvent('mousemove', {
+      // Move pointer far to the right to increase width
+      const pointerMoveEvent = new PointerEvent('pointermove', {
         bubbles: true,
-        clientX: 2000,
-        clientY: 2000
+        pointerId: 2,
+        clientX: 1000,
+        clientY: 500
       });
-      window.dispatchEvent(mouseMoveEvent);
+      window.dispatchEvent(pointerMoveEvent);
     });
-    // The grid should have grown
-    const newWidth = parseInt(gridInner.style.minWidth);
-    expect(newWidth).toBeGreaterThan(initialWidth);
 
-    vi.unstubAllGlobals();
+    // The module width should have grown
+    // Note: In JSDOM, getBoundingClientRect might need more mocking,
+    // but we can also check the inline style width.
+    expect(moduleCard.style.width).toContain('calc');
+    expect(moduleCard.style.width).not.toBe(`calc(var(--grid-unit) * 18)`);
   });
-
   it("removes newly-placed class after timeout", async () => {
     vi.useFakeTimers();
     render(<App />);

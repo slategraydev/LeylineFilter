@@ -11,6 +11,7 @@ describe('RNNoiseModule', () => {
     id: "test-rnnoise",
     initialPosition: { gx: 1, gy: 1 },
     heightUnits: 11,
+    widthUnits: 18,
     onPositionChange: () => { },
     onHeightReport: () => { },
   };

@@ -14,6 +14,7 @@ describe('FilterModule', () => {
     id: "test-filter",
     initialPosition: { gx: 1, gy: 1 },
     heightUnits: 24,
+    widthUnits: 18,
     onPositionChange: () => { },
     onHeightReport: () => { },
   };
