@@ -101,9 +101,11 @@ pub struct Metrics {
     latency_ms: f32,
     cpu_usage: f32,
     input_level: f32,
+    input_level_db: f32,
     buffer_size: u32,
-    spectrum: [f32; 12],
-    tonality: [f32; 12],
+    spectrum: Vec<f32>,
+    tonality: Vec<f32>,
+    waveform: Vec<f32>,
     state_version: u32,
 }
 
@@ -113,7 +115,8 @@ impl Metrics {
     /// This allows us to unit test the data transformation without initializing the full Tauri runtime.
     pub fn from_engine(engine: &mut AudioEngine) -> Self {
         let is_running = engine.is_running();
-        let (_, cpu, level, buffer_size, spectrum, tonality, version) = engine.metrics.get();
+        let (_, cpu, level, level_db, buffer_size, spectrum, tonality, waveform, version) =
+            engine.metrics.get();
 
         // If not running, latency should be reported as 0.0
         let latency = if !is_running {
@@ -126,9 +129,11 @@ impl Metrics {
             latency_ms: latency.round(),
             cpu_usage: (cpu * 10.0).round() / 10.0,
             input_level: level,
+            input_level_db: level_db,
             buffer_size,
-            spectrum,
-            tonality,
+            spectrum: spectrum.to_vec(),
+            tonality: tonality.to_vec(),
+            waveform: waveform.to_vec(),
             state_version: version,
         }
     }

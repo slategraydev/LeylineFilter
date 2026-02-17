@@ -13,7 +13,12 @@ const MODULE_TYPES = [
   { label: 'Noise Expander', type: 'Expander' },
   { label: 'Noise Suppression', type: 'RNNoise' },
   { label: 'Audio Filter', type: 'Filter' },
-  { label: 'Visualizer', type: 'Visualizer' },
+  { label: 'Parametric EQ', type: 'ParametricEQ' },
+  { label: 'Dynamic Compressor', type: 'Compressor' },
+  { label: 'Vocal De-Esser', type: 'Deesser' },
+  { label: 'Tube Saturation', type: 'Saturation' },
+  { label: 'Brickwall Limiter', type: 'Limiter' },
+  { label: 'Room De-Reverb', type: 'Dereverb' },
 ];
 
 export function AddModuleMenu({ onAdd, onClose, existingTypes }: AddModuleMenuProps) {
@@ -21,10 +26,6 @@ export function AddModuleMenu({ onAdd, onClose, existingTypes }: AddModuleMenuPr
 
   return (
     <div className="add-module-menu">
-      <div className="menu-header">
-        <span>Add Module</span>
-        <button className="close-menu-btn" onClick={onClose}>&times;</button>
-      </div>
       <div className="menu-items">
         {filteredTypes.length > 0 ? (
           filteredTypes.map((item) => (

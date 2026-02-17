@@ -1,5 +1,15 @@
 use serde::{Deserialize, Serialize};
 
+/// Configuration for a single band of a parametric EQ.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EQBandConfig {
+    pub enabled: bool,
+    pub filter_type: String, // "LowShelf", "HighShelf", "Peaking"
+    pub frequency: f32,
+    pub q: f32,
+    pub gain_db: f32,
+}
+
 /// Configuration options for the various audio modules.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
@@ -34,6 +44,11 @@ pub enum ModuleConfig {
         frequency: f32,
         q: f32,
     },
+    /// Configuration for a multi-band Parametric EQ.
+    ParametricEQ {
+        enabled: bool,
+        bands: Vec<EQBandConfig>,
+    },
     /// Configuration for an FX module (Reverb/Delay).
     #[allow(dead_code)]
     FX {
@@ -42,8 +57,34 @@ pub enum ModuleConfig {
         mix: f32,
         params: std::collections::HashMap<String, f32>,
     },
-    /// Configuration for the Visualizer module.
-    Visualizer { enabled: bool },
+    /// Configuration for a Deesser module.
+    Deesser {
+        enabled: bool,
+        threshold_db: f32,
+        ratio: f32,
+        attack_ms: f32,
+        release_ms: f32,
+        frequency: f32,
+    },
+    /// Configuration for the Saturation module.
+    Saturation {
+        enabled: bool,
+        drive: f32,
+        tilt: f32,
+        mix: f32,
+    },
+    /// Configuration for a Brickwall Limiter.
+    Limiter {
+        enabled: bool,
+        threshold_db: f32,
+        release_ms: f32,
+    },
+    /// Configuration for a Room De-Reverb module.
+    Dereverb {
+        enabled: bool,
+        reduction: f32,
+        sensitivity: f32,
+    },
     /// Placeholder for no configuration.
     None,
 }
@@ -165,8 +206,12 @@ pub trait AudioModule: Send + Sync {
             ModuleConfig::Gain { enabled, .. } => enabled,
             ModuleConfig::Compressor { enabled, .. } => enabled,
             ModuleConfig::Filter { enabled, .. } => enabled,
+            ModuleConfig::ParametricEQ { enabled, .. } => enabled,
+            ModuleConfig::Deesser { enabled, .. } => enabled,
+            ModuleConfig::Saturation { enabled, .. } => enabled,
+            ModuleConfig::Limiter { enabled, .. } => enabled,
+            ModuleConfig::Dereverb { enabled, .. } => enabled,
             ModuleConfig::FX { enabled, .. } => enabled,
-            ModuleConfig::Visualizer { enabled, .. } => enabled,
             _ => true,
         }
     }

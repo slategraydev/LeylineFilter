@@ -63,7 +63,7 @@ export function VisualizerModule({
       style={style}
       isNewlyPlaced={isNewlyPlaced}
     >
-      <div style={{ height: '7em', marginTop: '4px' }}>
+      <div style={{ flex: 1, minHeight: '100px', width: '100%', marginTop: '4px' }}>
         <Visualizer
           isRunning={isRunning && enabled}
           spectrum={spectrum}

@@ -7,14 +7,27 @@ import { ExpanderModule } from "./components/Modules/ExpanderModule";
 import { RNNoiseModule } from "./components/Modules/RNNoiseModule";
 import { GainModule } from "./components/Modules/GainModule";
 import { FilterModule } from "./components/Modules/FilterModule";
-import { VisualizerModule } from "./components/Modules/VisualizerModule";
+import { CompressorModule } from "./components/Modules/CompressorModule";
+import { DeesserModule } from "./components/Modules/DeesserModule";
+import { SaturationModule } from "./components/Modules/SaturationModule";
+import { LimiterModule } from "./components/Modules/LimiterModule";
+import { DereverbModule } from "./components/Modules/DereverbModule";
+import { ParametricEQModule } from "./components/Modules/ParametricEQModule";
 import { AddModuleMenu } from "./components/Engine/AddModuleMenu";
 import { EngineControls } from "./components/Engine/EngineControls";
+import { Oscilloscope } from "./components/Sidebar/Oscilloscope";
+import { Visualizer } from "./components/Visualizer/Visualizer";
 import {
   ExpanderConfig,
   RNNoiseConfig,
   GainConfig,
   FilterConfig,
+  CompressorConfig,
+  ParametricEQConfig,
+  DeesserConfig,
+  SaturationConfig,
+  LimiterConfig,
+  DereverbConfig,
   ModuleConfig,
 } from "./types";
 import { GridPosition } from "./hooks/useDraggable";
@@ -333,6 +346,68 @@ function App() {
           />
         );
         break;
+      case "Compressor":
+        moduleComponent = (
+          <CompressorModule
+            {...commonProps}
+            config={module.config.data as CompressorConfig}
+            onChange={(data) => handleUpdateConfig(module.id, { type: "Compressor", data })}
+          />
+        );
+        break;
+      case "ParametricEQ":
+        moduleComponent = (
+          <ParametricEQModule
+            {...commonProps}
+            config={module.config.data as ParametricEQConfig}
+            onChange={(data) => handleUpdateConfig(module.id, { type: "ParametricEQ", data })}
+          />
+        );
+        break;
+      case "Deesser":
+        moduleComponent = (
+          <DeesserModule
+            key={module.id}
+            {...commonProps}
+            config={config.data as DeesserConfig}
+            onChange={(data) => handleUpdateConfig(module.id, { type: "Deesser", data })}
+          />
+        );
+        break;
+      case "Saturation":
+        moduleComponent = (
+          <SaturationModule
+            key={module.id}
+            {...commonProps}
+            config={config.data as SaturationConfig}
+            onChange={(data) => handleUpdateConfig(module.id, { type: "Saturation", data })}
+          />
+        );
+        break;
+      case "Limiter":
+        moduleComponent = (
+          <LimiterModule
+            key={module.id}
+            {...commonProps}
+            config={config.data as LimiterConfig}
+            onUpdate={(data) => handleUpdateConfig(module.id, { type: "Limiter", data })}
+            onRemove={() => removeModule(module.id)}
+            onToggle={(enabled) => handleUpdateConfig(module.id, { type: "Limiter", data: { ...config.data as LimiterConfig, enabled } })}
+          />
+        );
+        break;
+      case "Dereverb":
+        moduleComponent = (
+          <DereverbModule
+            key={module.id}
+            {...commonProps}
+            config={config.data as DereverbConfig}
+            onUpdate={(data) => handleUpdateConfig(module.id, { type: "Dereverb", data })}
+            onRemove={() => removeModule(module.id)}
+            onToggle={(enabled) => handleUpdateConfig(module.id, { type: "Dereverb", data: { ...config.data as DereverbConfig, enabled } })}
+          />
+        );
+        break;
       case "Filter":
         moduleComponent = (
           <FilterModule
@@ -344,18 +419,8 @@ function App() {
         );
         break;
       case "Visualizer":
-        moduleComponent = (
-          <VisualizerModule
-            key={module.id}
-            {...commonProps}
-            enabled={config.data.enabled}
-            onToggle={(enabled) => handleUpdateConfig(module.id, { type: "Visualizer", data: { enabled } })}
-            isRunning={isRunning}
-            spectrum={metrics.spectrum}
-            tonality={metrics.tonality}
-          />
-        );
-        break;
+        // Removed from grid: rendered in sidebar now.
+        return null;
     }
 
     return moduleComponent;
@@ -371,38 +436,51 @@ function App() {
           <p className="sidebar-description">Neural Audio Engine</p>
         </header>
 
-        <div className="sidebar-section">
-          <EngineControls
-            isRunning={isRunning}
-            inputDevices={inputDevices}
-            outputDevices={outputDevices}
-            selectedInput={selectedInput}
-            selectedOutput={selectedOutput}
-            onInputChange={setSelectedInput}
-            onOutputChange={setSelectedOutput}
-          />
-        </div>
+        <div className="sidebar-content">
+          <div className="sidebar-section">
+            <EngineControls
+              isRunning={isRunning}
+              inputDevices={inputDevices}
+              outputDevices={outputDevices}
+              selectedInput={selectedInput}
+              selectedOutput={selectedOutput}
+              onInputChange={setSelectedInput}
+              onOutputChange={setSelectedOutput}
+            />
+          </div>
 
-        <div className="sidebar-section">
-          <div className="metrics-panel">
-            <div className="metric">
-              <label>Latency</label>
-              <span data-testid="latency-value">
-                {`${Math.round(metrics.latency_ms)} ms`}
-              </span>
+          <div className="sidebar-section">
+            <div className="metrics-panel">
+              <div className="metric">
+                <label>Latency</label>
+                <span data-testid="latency-value">
+                  {`${Math.round(metrics.latency_ms)} ms`}
+                </span>
+              </div>
+              <div className="metric">
+                <label>CPU Usage</label>
+                <span>{metrics.cpu_usage}%</span>
+              </div>
+              <div className="metric">
+                <label>Sample Rate</label>
+                <span>{isRunning && engineState ? `${(engineState.sample_rate / 1000).toFixed(1)} kHz` : "---"}</span>
+              </div>
+              <div className="metric">
+                <label>Buffer</label>
+                <span>{isRunning ? `${metrics.buffer_size || (engineState?.buffer_size ?? "---")} smp` : "---"}</span>
+              </div>
             </div>
-            <div className="metric">
-              <label>CPU Usage</label>
-              <span>{metrics.cpu_usage}%</span>
-            </div>
-            <div className="metric">
-              <label>Sample Rate</label>
-              <span>{isRunning && engineState ? `${(engineState.sample_rate / 1000).toFixed(1)} kHz` : "---"}</span>
-            </div>
-            <div className="metric">
-              <label>Buffer</label>
-              <span>{isRunning ? `${metrics.buffer_size || (engineState?.buffer_size ?? "---")} smp` : "---"}</span>
-            </div>
+          </div>
+          <div className="sidebar-section visualizer-top">
+            <Oscilloscope
+              waveform={metrics.waveform}
+              isRunning={isRunning}
+            />
+            <Visualizer
+              isRunning={isRunning}
+              spectrum={metrics.spectrum}
+              tonality={metrics.tonality}
+            />
           </div>
         </div>
 

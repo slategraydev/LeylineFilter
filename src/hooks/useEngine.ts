@@ -18,9 +18,11 @@ export function useEngine() {
     latency_ms: 0,
     cpu_usage: 0,
     input_level: 0,
+    input_level_db: -60,
     buffer_size: 256,
     spectrum: Array(12).fill(0),
     tonality: Array(12).fill(0),
+    waveform: Array(64).fill(0),
     state_version: 0,
   });
 
@@ -60,9 +62,11 @@ export function useEngine() {
           latency_ms: m?.latency_ms ?? 0,
           cpu_usage: m?.cpu_usage ?? 0,
           input_level: m?.input_level ?? 0,
+          input_level_db: m?.input_level_db ?? -60,
           buffer_size: m?.buffer_size ?? 256,
           spectrum: Array.isArray(m?.spectrum) ? m.spectrum : Array(12).fill(0),
           tonality: Array.isArray(m?.tonality) ? m.tonality : Array(12).fill(0),
+          waveform: Array.isArray(m?.waveform) ? m.waveform : Array(64).fill(0),
           state_version: m?.state_version ?? 0,
         };
 

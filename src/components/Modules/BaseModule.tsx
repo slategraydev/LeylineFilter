@@ -120,9 +120,14 @@ export function BaseModule({
         const gridUnit = GRID_UNIT_PX;
 
         const children = Array.from(content.children) as HTMLElement[];
+        const visibleChildren = children.filter(child => {
+          const style = window.getComputedStyle(child);
+          return style.display !== 'none' && style.visibility !== 'hidden' && child.offsetHeight > 0;
+        });
+
         let naturalContentHeight = 0;
-        if (children.length > 0) {
-          const lastChild = children[children.length - 1];
+        if (visibleChildren.length > 0) {
+          const lastChild = visibleChildren[visibleChildren.length - 1];
           naturalContentHeight = lastChild.offsetTop + lastChild.offsetHeight + gridUnit;
         } else {
           naturalContentHeight = gridUnit * 2;

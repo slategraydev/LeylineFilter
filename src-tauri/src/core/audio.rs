@@ -48,9 +48,11 @@ pub struct EngineMetrics {
     pub output_latency_ms: AtomicU32,
     pub cpu_usage: AtomicU32,
     pub input_level: AtomicU32,
+    pub input_level_db: AtomicU32,
     pub buffer_size: AtomicU32,
     pub spectrum: [AtomicU32; 12],
     pub tonality: [AtomicU32; 12],
+    pub waveform: [AtomicU32; 64],
     pub state_version: AtomicU32,
 }
 
@@ -62,9 +64,11 @@ impl EngineMetrics {
             output_latency_ms: AtomicU32::new(0),
             cpu_usage: AtomicU32::new(0),
             input_level: AtomicU32::new(0),
+            input_level_db: AtomicU32::new(0),
             buffer_size: AtomicU32::new(256),
             spectrum: Default::default(),
             tonality: Default::default(),
+            waveform: std::array::from_fn(|_| AtomicU32::new(0)),
             state_version: AtomicU32::new(0),
         }
     }
@@ -74,28 +78,58 @@ impl EngineMetrics {
             .store(processing_ms.to_bits(), Ordering::Relaxed);
     }
 
-    pub fn update_visualizer_metrics(&self, level: f32, bins: &[f32; 12], tonality: &[f32; 12]) {
+    pub fn update_visualizer_metrics(
+        &self,
+        level: f32,
+        bins: &[f32; 12],
+        tonality: &[f32; 12],
+        waveform: &[f32; 64],
+    ) {
         self.input_level.store(level.to_bits(), Ordering::Relaxed);
+        let db = 20.0 * level.max(1e-6).log10();
+        self.input_level_db.store(db.to_bits(), Ordering::Relaxed);
+
         for i in 0..12 {
             self.spectrum[i].store(bins[i].to_bits(), Ordering::Relaxed);
             self.tonality[i].store(tonality[i].to_bits(), Ordering::Relaxed);
         }
+        for i in 0..64 {
+            self.waveform[i].store(waveform[i].to_bits(), Ordering::Relaxed);
+        }
     }
 
-    pub fn get(&self) -> (f32, f32, f32, u32, [f32; 12], [f32; 12], u32) {
+    pub fn get(
+        &self,
+    ) -> (
+        f32,
+        f32,
+        f32,
+        f32,
+        u32,
+        [f32; 12],
+        [f32; 12],
+        [f32; 64],
+        u32,
+    ) {
         let mut bins = [0.0f32; 12];
         let mut tonal = [0.0f32; 12];
+        let mut wave = [0.0f32; 64];
         for i in 0..12 {
             bins[i] = f32::from_bits(self.spectrum[i].load(Ordering::Relaxed));
             tonal[i] = f32::from_bits(self.tonality[i].load(Ordering::Relaxed));
+        }
+        for i in 0..64 {
+            wave[i] = f32::from_bits(self.waveform[i].load(Ordering::Relaxed));
         }
         (
             f32::from_bits(self.latency_ms.load(Ordering::Relaxed)),
             f32::from_bits(self.cpu_usage.load(Ordering::Relaxed)),
             f32::from_bits(self.input_level.load(Ordering::Relaxed)),
+            f32::from_bits(self.input_level_db.load(Ordering::Relaxed)),
             self.buffer_size.load(Ordering::Relaxed),
             bins,
             tonal,
+            wave,
             self.state_version.load(Ordering::Relaxed),
         )
     }
@@ -261,8 +295,12 @@ impl AudioEngine {
                     ModuleConfig::Gain { .. } => "Gain",
                     ModuleConfig::Compressor { .. } => "Compressor",
                     ModuleConfig::Filter { .. } => "Filter",
+                    ModuleConfig::ParametricEQ { .. } => "ParametricEQ",
+                    ModuleConfig::Deesser { .. } => "Deesser",
+                    ModuleConfig::Saturation { .. } => "Saturation",
+                    ModuleConfig::Limiter { .. } => "Limiter",
+                    ModuleConfig::Dereverb { .. } => "Dereverb",
                     ModuleConfig::FX { .. } => "FX",
-                    ModuleConfig::Visualizer { .. } => "Visualizer",
                     _ => "Unknown",
                 };
                 if let Ok(mut configs) = self.module_configs.lock() {
@@ -438,7 +476,9 @@ impl AudioEngine {
         if let Ok(offline) = self.offline_chain.lock() {
             for m_info in offline.get_state(false, 0).modules {
                 // Use the module's name and original ID to re-create it
-                if let Some(mut m) = ModuleFactory::create_with_id(&m_info.name, m_info.id, internal_sample_rate) {
+                if let Some(mut m) =
+                    ModuleFactory::create_with_id(&m_info.name, m_info.id, internal_sample_rate)
+                {
                     m.update_config(&m_info.config);
                     chain.add_module(m);
                 }
