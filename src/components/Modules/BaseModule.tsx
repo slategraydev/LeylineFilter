@@ -212,11 +212,11 @@ export function BaseModule({
         }
       }}
       onMouseDown={(e) => {
-        if (e.button === 1 && onRemove) {
+        if (e.button === 1) {
           // Middle click
           e.preventDefault();
           e.stopPropagation();
-          onRemove();
+          onToggle(!enabled);
         }
       }}
     >
