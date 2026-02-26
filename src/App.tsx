@@ -47,9 +47,10 @@ import "./App.css";
 function App() {
   const {
     isRunning,
-    isMonitoring,
     inputDevices,
     outputDevices,
+    monitorDevice,
+    setMonitorDevice,
     engineState,
     metrics,
     startEngine,
@@ -59,8 +60,13 @@ function App() {
     removeModule,
   } = useEngine();
 
-  const [selectedInput, setSelectedInput] = useState<string>("Default");
-  const [selectedOutput, setSelectedOutput] = useState<string>("Default");
+  const [selectedInput, setSelectedInput] = useState<string>(
+    () => localStorage.getItem("device_input") ?? "Default"
+  );
+  const [selectedOutput, setSelectedOutput] = useState<string>(
+    () => localStorage.getItem("device_output") ?? "Default"
+  );
+
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [newlyPlacedIds, setNewlyPlacedIds] = useState<Set<string>>(new Set());
   const [expectingNewModule, setExpectingNewModule] = useState(false);
@@ -230,8 +236,9 @@ function App() {
     });
   };
 
-  // Handle global clicks to close menu
+
   useEffect(() => {
+
     if (!showAddMenu) return;
 
     const handleContext = (_e: MouseEvent) => {
@@ -266,15 +273,26 @@ function App() {
 
   const handleInputChange = (device: string) => {
     setSelectedInput(device);
+    localStorage.setItem("device_input", device);
     if (isRunning) {
-      startEngine(device, selectedOutput);
+      startEngine(device, selectedOutput, monitorDevice);
     }
   };
 
   const handleOutputChange = (device: string) => {
     setSelectedOutput(device);
+    localStorage.setItem("device_output", device);
     if (isRunning) {
-      startEngine(selectedInput, device);
+      startEngine(selectedInput, device, monitorDevice);
+    }
+  };
+
+  const handleMonitorChange = (device: string) => {
+    const dev = device === "None" ? null : device;
+    setMonitorDevice(dev);
+    setMonitoring(dev !== null);
+    if (isRunning) {
+      startEngine(selectedInput, selectedOutput, dev);
     }
   };
 
@@ -282,7 +300,7 @@ function App() {
     if (isRunning) {
       stopEngine();
     } else {
-      startEngine(selectedInput, selectedOutput);
+      startEngine(selectedInput, selectedOutput, monitorDevice);
     }
   };
 
@@ -518,14 +536,14 @@ function App() {
           <div className="sidebar-section">
             <EngineControls
               isRunning={isRunning}
-              isMonitoring={isMonitoring}
               inputDevices={inputDevices}
               outputDevices={outputDevices}
               selectedInput={selectedInput}
               selectedOutput={selectedOutput}
+              selectedMonitor={monitorDevice ?? "None"}
               onInputChange={handleInputChange}
               onOutputChange={handleOutputChange}
-              onToggleMonitoring={setMonitoring}
+              onMonitorChange={handleMonitorChange}
             />
           </div>
 

@@ -139,28 +139,21 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 4px;
 }
 
 /* --- Engine Controls --- */
 .engine-controls {
     display: flex;
     flex-direction: column;
-    gap: 12px;
 }
 
 .selector label {
     display: flex;
     flex-direction: column;
-    gap: 6px;
     font-size: 0.75rem;
     text-transform: uppercase;
     color: var(--color-text-dim);
     font-weight: 700;
-}
-
-.selector:nth-child(2) {
-    margin-top: 8px;
 }
 
 .selector select {
@@ -198,7 +191,7 @@ body {
     border: 1px solid var(--color-accent);
     color: var(--color-text-main);
     font-family: var(--font-mono);
-    font-size: 0.9rem;
+    font-size: 1.0rem;
     text-transform: uppercase;
     font-weight: bold;
     cursor: pointer;
@@ -206,7 +199,6 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
 }
 
 .engine-toggle:hover {
@@ -232,7 +224,6 @@ body {
 /* --- Metrics --- */
 .visualizer-row {
     display: flex;
-    gap: 12px;
     align-items: stretch;
 }
 
@@ -409,6 +400,7 @@ body {
 }
 
 @keyframes diamond-pulse {
+
     0%,
     100% {
         opacity: 0.4;
@@ -420,8 +412,7 @@ body {
         opacity: 1;
         transform: scale(1);
         stroke: var(--color-mauve);
-        filter: drop-shadow(0 0 10px var(--color-mauve))
-            drop-shadow(0 0 5px var(--color-mauve));
+        filter: drop-shadow(0 0 10px var(--color-mauve)) drop-shadow(0 0 5px var(--color-mauve));
     }
 }
 

@@ -58,10 +58,11 @@ async fn start_engine(
     state: State<'_, AppState>,
     input_device: Option<String>,
     output_device: Option<String>,
+    monitor_device: Option<String>,
 ) -> std::result::Result<(), String> {
     let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
     engine
-        .start(input_device, output_device)
+        .start(input_device, output_device, monitor_device)
         .map_err(|e| e.to_string())
 }
 
@@ -96,7 +97,10 @@ async fn stop_engine(state: State<'_, AppState>) -> std::result::Result<(), Stri
 }
 
 #[tauri::command]
-async fn set_monitoring(state: State<'_, AppState>, enabled: bool) -> std::result::Result<(), String> {
+async fn set_monitoring(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> std::result::Result<(), String> {
     let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
     engine.set_monitoring(enabled);
     Ok(())

@@ -11,9 +11,10 @@ import { EngineMetrics, EngineState } from "../types";
  */
 export function useEngine() {
   const [isRunning, setIsRunning] = useState(false);
-  const [isMonitoring, setIsMonitoring] = useState(true);
+  const [isMonitoring, setIsMonitoring] = useState(false);
   const [inputDevices, setInputDevices] = useState<string[]>([]);
   const [outputDevices, setOutputDevices] = useState<string[]>([]);
+  const [monitorDevice, setMonitorDevice] = useState<string | null>(null);
   const [engineState, setEngineState] = useState<EngineState | null>(null);
   const [metrics, setMetrics] = useState<EngineMetrics>({
     latency_ms: 0,
@@ -105,14 +106,15 @@ export function useEngine() {
     }
   };
 
-  const startEngine = async (inputDevice: string, outputDevice: string) => {
+  const startEngine = async (inputDevice: string, outputDevice: string, monDev?: string | null) => {
     try {
       console.log(
-        `Starting engine with Input: ${inputDevice}, Output: ${outputDevice}`,
+        `Starting engine with Input: ${inputDevice}, Output: ${outputDevice}, Monitor: ${monDev ?? "none"}`,
       );
       await invoke("start_engine", {
-        input_device: inputDevice === "Default" ? null : inputDevice,
-        output_device: outputDevice === "Default" ? null : outputDevice,
+        inputDevice: inputDevice,
+        outputDevice: outputDevice,
+        monitorDevice: monDev && monDev !== "None" ? monDev : null,
       });
       setIsRunning(true);
       // Force a state refresh immediately after start
@@ -162,6 +164,8 @@ export function useEngine() {
     isMonitoring,
     inputDevices,
     outputDevices,
+    monitorDevice,
+    setMonitorDevice,
     engineState,
     metrics,
     startEngine,

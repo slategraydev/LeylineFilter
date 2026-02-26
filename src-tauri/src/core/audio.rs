@@ -152,6 +152,8 @@ impl EngineMetrics {
 pub struct AudioEngine {
     input_stream: Option<StreamWrapper>,
     output_stream: Option<StreamWrapper>,
+    /// Optional second output stream for headphone/speaker monitoring.
+    monitor_stream: Option<StreamWrapper>,
     module_configs: Arc<Mutex<HashMap<String, ModuleConfig>>>,
     // Changed to InternalEngineCommand
     command_tx: Arc<Mutex<Option<Sender<InternalEngineCommand>>>>,
@@ -175,6 +177,7 @@ pub struct AudioEngine {
     garbage_rx: Option<Receiver<Box<dyn AudioModule>>>,
     // Persistent chain for offline management
     offline_chain: Arc<Mutex<SignalChain>>,
+    prefill_samples: usize,
 }
 
 impl AudioEngine {
@@ -203,6 +206,7 @@ impl AudioEngine {
         Self {
             input_stream: None,
             output_stream: None,
+            monitor_stream: None,
             module_configs: Arc::new(Mutex::new(HashMap::new())),
             command_tx: Arc::new(Mutex::new(None)),
             metrics: Arc::new(EngineMetrics::new()),
@@ -213,13 +217,13 @@ impl AudioEngine {
             buffer_size: initial_bs,
             last_latency: 0.0,
             last_cpu: 0.0,
-            monitoring_enabled: Arc::new(AtomicBool::new(true)),
+            monitoring_enabled: Arc::new(AtomicBool::new(false)),
             rb_occupancy: Arc::new(AtomicUsize::new(0)),
             module_latency_samples: Arc::new(AtomicUsize::new(0)),
             chain_state: Arc::new(Mutex::new(EngineState {
                 modules: Vec::new(),
                 is_running: false,
-                monitoring_enabled: true,
+                monitoring_enabled: false,
                 sample_rate: initial_sr,
                 buffer_size: initial_bs,
             })),
@@ -228,6 +232,7 @@ impl AudioEngine {
             vis_running: Arc::new(AtomicBool::new(false)),
             garbage_rx: None,
             offline_chain,
+            prefill_samples: 0,
         }
     }
 
@@ -257,30 +262,30 @@ impl AudioEngine {
 
         let processing_ms = f32::from_bits(self.metrics.latency_ms.load(Ordering::Relaxed));
 
-        // Chunk size is based on internal sample rate (10ms of internal rate)
-        let chunk_size = (self.internal_sample_rate * 0.01) as usize;
-        let chunk_latency_ms = (chunk_size as f32 / self.internal_sample_rate) * 1000.0;
+        // 10ms internal processing chunk duration
+        let chunk_latency_ms = 10.0;
 
-        // Ring buffer contains output samples
-        let rb_samples = self.rb_occupancy.load(Ordering::Relaxed);
-        let rb_latency_ms = (rb_samples as f32 / self.sample_rate) * 1000.0;
+        // Correctly subtract the safety pre-fill from the reported latency
+        let rb_samples = self
+            .rb_occupancy
+            .load(Ordering::Relaxed)
+            .saturating_sub(self.prefill_samples);
+        let rb_latency_ms = (rb_samples as f32 / self.sample_rate.max(1.0)) * 1000.0;
 
-        // Modules operate at internal sample rate
         let mod_samples = self.module_latency_samples.load(Ordering::Relaxed);
-        let mod_latency_ms = (mod_samples as f32 / self.internal_sample_rate) * 1000.0;
-
-        let (in_lat, out_lat) = self.metrics.get_hardware_latencies();
+        let mod_latency_ms = (mod_samples as f32 / self.internal_sample_rate.max(1.0)) * 1000.0;
 
         let current_latency =
-            processing_ms + chunk_latency_ms + rb_latency_ms + mod_latency_ms + in_lat + out_lat;
+            (processing_ms + chunk_latency_ms + rb_latency_ms + mod_latency_ms).max(0.0);
 
         if self.last_latency == 0.0 {
             self.last_latency = current_latency;
         } else {
-            self.last_latency = self.last_latency * 0.9 + current_latency * 0.1;
+            // Very smooth alpha for a steady UI display
+            self.last_latency = self.last_latency * 0.98 + current_latency * 0.02;
         }
 
-        self.last_latency
+        self.last_latency.round()
     }
 
     pub fn update_cpu_usage(&mut self) -> f32 {
@@ -442,6 +447,7 @@ impl AudioEngine {
         &mut self,
         input_device_name: Option<String>,
         output_device_name: Option<String>,
+        monitor_device_name: Option<String>,
     ) -> EngineResult<()> {
         if self.is_running() {
             log::info!("Restarting engine for device swap...");
@@ -452,64 +458,114 @@ impl AudioEngine {
 
         log::info!("Using audio host: {:?}", host.id());
 
-        let input_device = if let Some(name) = input_device_name {
+        let input_device = if let Some(ref name) = input_device_name {
             if name == "Default" {
                 host.default_input_device()
             } else {
                 host.input_devices()?
-                    .find(|d| d.name().ok().as_ref() == Some(&name))
+                    .find(|d| d.name().ok().as_ref() == Some(name))
             }
         } else {
             host.default_input_device()
         }
         .ok_or_else(|| EngineError::DeviceError("Input device not found".to_string()))?;
 
-        let output_device = if let Some(name) = output_device_name {
+        let output_device = if let Some(ref name) = output_device_name {
             if name == "Default" {
                 host.default_output_device()
             } else {
                 host.output_devices()?
-                    .find(|d| d.name().ok().as_ref() == Some(&name))
+                    .find(|d| d.name().ok().as_ref() == Some(name))
             }
         } else {
             host.default_output_device()
         }
         .ok_or_else(|| EngineError::DeviceError("Output device not found".to_string()))?;
 
-        log::info!("Selected Input Device: {}", input_device.name().unwrap_or_default());
-        log::info!("Selected Output Device: {}", output_device.name().unwrap_or_default());
+        let actual_in = input_device
+            .name()
+            .unwrap_or_else(|_| "Unknown".to_string());
+        let actual_out = output_device
+            .name()
+            .unwrap_or_else(|_| "Unknown".to_string());
 
-        let mut input_config_supported = input_device.default_input_config()?;
-        let mut output_config_supported = output_device.default_output_config()?;
+        // Loud diagnostics to identify if we are hitting System Default by accident
+        println!("!!! [ENGINE START] !!!");
+        println!("Requested Input:   {:?}", input_device_name);
+        println!("Requested Output:  {:?}", output_device_name);
+        println!("Requested Monitor: {:?}", monitor_device_name);
+        println!("Actual Output:     {}", actual_out);
+        println!("Primary Input:     {}", actual_in);
 
-        // Search for F32 support if default is different
-        if input_config_supported.sample_format() != cpal::SampleFormat::F32 {
-            if let Ok(configs) = input_device.supported_input_configs() {
-                if let Some(f32_config) = configs.filter(|c| c.sample_format() == cpal::SampleFormat::F32).next() {
-                    log::info!("Found alternative F32 input config");
-                    input_config_supported = f32_config.with_max_sample_rate();
-                }
+        log::info!("Selected Input Device: {}", actual_in);
+        log::info!("Selected Output Device: {}", actual_out);
+
+        let input_default = input_device.default_input_config()?;
+        let output_default = output_device.default_output_config()?;
+
+        // Prefer F32 natively, but fall back to any supported integer format.
+        // Clamp to the device's default sample rate, not the maximum, to avoid
+        // virtual devices (e.g. VB-Audio CABLE) rejecting the stream.
+        let find_f32_config = |supported: &cpal::SupportedStreamConfigRange,
+                               default_rate: cpal::SampleRate| {
+            let clamped = supported
+                .max_sample_rate()
+                .0
+                .min(default_rate.0)
+                .max(supported.min_sample_rate().0);
+            supported
+                .clone()
+                .with_sample_rate(cpal::SampleRate(clamped))
+        };
+
+        let in_default_rate = input_default.sample_rate();
+        let out_default_rate = output_default.sample_rate();
+
+        let input_config_supported = if input_default.sample_format() == cpal::SampleFormat::F32 {
+            input_default
+        } else {
+            match input_device.supported_input_configs() {
+                Ok(cfgs) => cfgs
+                    .filter(|c| c.sample_format() == cpal::SampleFormat::F32)
+                    .next()
+                    .map(|c| find_f32_config(&c, in_default_rate))
+                    .unwrap_or_else(|| {
+                        log::warn!(
+                            "Input device '{}' has no F32 config; using native {:?}",
+                            input_device.name().unwrap_or_default(),
+                            input_default.sample_format()
+                        );
+                        input_default
+                    }),
+                Err(_) => input_default,
             }
-        }
+        };
 
-        if output_config_supported.sample_format() != cpal::SampleFormat::F32 {
-            if let Ok(configs) = output_device.supported_output_configs() {
-                if let Some(f32_config) = configs.filter(|c| c.sample_format() == cpal::SampleFormat::F32).next() {
-                    log::info!("Found alternative F32 output config");
-                    output_config_supported = f32_config.with_max_sample_rate();
-                }
+        let output_config_supported = if output_default.sample_format() == cpal::SampleFormat::F32 {
+            output_default
+        } else {
+            match output_device.supported_output_configs() {
+                Ok(cfgs) => cfgs
+                    .filter(|c| c.sample_format() == cpal::SampleFormat::F32)
+                    .next()
+                    .map(|c| find_f32_config(&c, out_default_rate))
+                    .unwrap_or_else(|| {
+                        log::warn!(
+                            "Output device '{}' has no F32 config; using native {:?}",
+                            output_device.name().unwrap_or_default(),
+                            output_default.sample_format()
+                        );
+                        output_default
+                    }),
+                Err(_) => output_default,
             }
-        }
+        };
 
-        if input_config_supported.sample_format() != cpal::SampleFormat::F32 {
-            return Err(EngineError::DeviceError(format!("Input device {} does not support F32 samples", input_device.name().unwrap_or_default())));
-        }
-        if output_config_supported.sample_format() != cpal::SampleFormat::F32 {
-            return Err(EngineError::DeviceError(format!("Output device {} does not support F32 samples", output_device.name().unwrap_or_default())));
-        }
+        let in_sample_format = input_config_supported.sample_format();
+        let out_sample_format = output_config_supported.sample_format();
 
-        log::info!("Final Input Format: {:?}", input_config_supported.sample_format());
-        log::info!("Final Output Format: {:?}", output_config_supported.sample_format());
+        log::info!("Final Input Format: {:?}", in_sample_format);
+        log::info!("Final Output Format: {:?}", out_sample_format);
 
         let mut input_config: cpal::StreamConfig = input_config_supported.into();
         let mut output_config: cpal::StreamConfig = output_config_supported.into();
@@ -524,6 +580,9 @@ impl AudioEngine {
         let in_sample_rate = input_config.sample_rate.0 as f64;
         let out_sample_rate = output_config.sample_rate.0 as f64;
         let in_channels = input_config.channels as usize;
+        // Track formats so the stream builders can dispatch conversion logic.
+        let in_fmt = in_sample_format;
+        let out_fmt = out_sample_format;
 
         self.sample_rate = out_sample_rate as f32;
 
@@ -597,6 +656,26 @@ impl AudioEngine {
         // Setup Audio Ring Buffer
         let rb = HeapRb::<f32>::new((self.sample_rate as usize * 2).max(4800 * 2));
         let (mut producer, mut consumer) = rb.split();
+
+        // Pre-fill with 2 chunks of silence (~20ms) so the output stream never underruns
+        // on its very first callback. Virtual devices (e.g. VB-Audio CABLE) fire their
+        // output callback almost immediately, before the input side has produced anything.
+        let prefill_samples = (internal_sample_rate as usize / 100) * 2; // ~20ms
+        self.prefill_samples = prefill_samples;
+        for _ in 0..prefill_samples {
+            let _ = producer.try_push(0.0);
+        }
+        log::info!(
+            "Ring buffer pre-filled with {} samples (~{:.1}ms) of silence",
+            prefill_samples,
+            prefill_samples as f32 / out_sample_rate as f32 * 1000.0
+        );
+
+        // Secondary ring buffer for the optional monitor/headphone stream.
+        // No pre-fill needed; the monitor stream is non-critical and tolerates brief startup silence.
+        let mon_rb = HeapRb::<f32>::new((self.sample_rate as usize * 2).max(4800 * 2));
+        let (mut mon_producer, mut mon_consumer) = mon_rb.split();
+        let monitoring_flag_for_tee = self.monitoring_enabled.clone();
 
         // Setup Visualizer Ring Buffer & Thread
         let vis_rb = HeapRb::<f32>::new(8192);
@@ -672,9 +751,15 @@ impl AudioEngine {
         // --- INPUT STREAM (Audio Thread) ---
         // This closure runs on the high-priority audio thread.
         // MALLOC/FREE FORBIDDEN. LOCKING FORBIDDEN.
-        let input_stream = input_device.build_input_stream(
-            &input_config,
-            move |data: &[f32], info: &cpal::InputCallbackInfo| {
+        //
+        // # Format Dispatch
+        // Virtual devices (e.g. VB-Audio CABLE) commonly expose I16 or I32 in WASAPI
+        // shared mode, not F32. We convert to F32 at the boundary so the DSP chain
+        // always works in float. The conversion is branchless per-sample arithmetic.
+
+        // Shared inner processing logic, called from each format arm below.
+        let mut run_input_processing = {
+            move |data_f32: &[f32], in_ch: usize| {
                 let start_time = Instant::now();
 
                 // 1. Process Command Queue (Lock-Free)
@@ -686,13 +771,11 @@ impl AudioEngine {
                             chain_changed = true;
                         }
                         InternalEngineCommand::AddModule(module) => {
-                            // Module is already boxed and created!
                             chain.add_module(module);
                             chain_changed = true;
                         }
                         InternalEngineCommand::RemoveModule(id) => {
                             if let Some(module) = chain.remove_module(&id) {
-                                // Send back to main thread for dropping
                                 let _ = garbage_tx.send(module);
                             }
                             chain_changed = true;
@@ -716,7 +799,6 @@ impl AudioEngine {
                 if chain_changed {
                     let total_lat = chain.latency_samples();
                     mod_lat_atomic.store(total_lat, Ordering::Relaxed);
-                    // Try-lock for UI sync (best effort)
                     if let Ok(mut state_lock) = chain_state_clone.try_lock() {
                         let current_buf = metrics.buffer_size.load(Ordering::Relaxed);
                         let is_mon = monitoring_enabled_flag.load(Ordering::Relaxed);
@@ -726,17 +808,8 @@ impl AudioEngine {
                     }
                 }
 
-                if let Some(diff) = info
-                    .timestamp()
-                    .callback
-                    .duration_since(&info.timestamp().capture)
-                {
-                    metrics
-                        .input_latency_ms
-                        .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
-                }
-
-                for frame in data.chunks(in_channels) {
+                // Downmix to mono (take channel 0 only)
+                for frame in data_f32.chunks(in_ch) {
                     input_accumulator.push(frame[0]);
                 }
 
@@ -744,7 +817,8 @@ impl AudioEngine {
                 if let Some(ref mut rs) = resampler_in {
                     while input_accumulator.len() >= rs.input_frames_next() {
                         let len = rs.input_frames_next();
-                        resample_buf[0] = input_accumulator.drain(..len).collect();
+                        resample_buf[0].clear();
+                        resample_buf[0].extend(input_accumulator.drain(..len));
                         if let Ok(resampled) = rs.process(&resample_buf, None) {
                             internal_accumulator.extend_from_slice(&resampled[0]);
                         }
@@ -763,10 +837,7 @@ impl AudioEngine {
                         working_chunk[i] = sample;
                     }
 
-                    // --- THE CORE DSP CHAIN ---
                     chain.process(&mut working_chunk);
-
-                    // Send to visualizer thread (non-blocking push)
                     vis_prod.push_slice(&working_chunk);
 
                     // 4. Resample Out
@@ -780,62 +851,324 @@ impl AudioEngine {
                         output_accumulator.extend_from_slice(&working_chunk);
                     }
 
-                    // Push to output ringbuffer only if monitoring is enabled
-                    if monitoring_enabled_flag.load(Ordering::Relaxed) {
-                        producer.push_slice(&output_accumulator);
+                    // 5. Monitor tee: Always push the raw processed audio to the monitor buffer
+                    // before any primary-path muting happens.
+                    if monitoring_flag_for_tee.load(Ordering::Relaxed) {
+                        mon_producer.push_slice(&output_accumulator);
+                    } else {
+                        for _ in 0..output_accumulator.len() {
+                            let _ = mon_producer.try_push(0.0);
+                        }
                     }
+
+                    // Primary Output Buffer
+                    producer.push_slice(&output_accumulator);
+
                     output_accumulator.clear();
 
                     rb_occ_in.store(producer.occupied_len(), Ordering::Relaxed);
                     let elapsed = start_time.elapsed().as_secs_f32() * 1000.0;
                     metrics.update_latency(elapsed);
                 }
-            },
-            |err| log::error!("Input stream error: {}", err),
-            None,
-        )?;
+            }
+        };
+
+        // Each match arm owns its own clone of the metrics arc for hardware latency tracking,
+        // since a single closure cannot be moved into multiple arms simultaneously.
+        let metrics_in_f32 = self.metrics.clone();
+        let metrics_in_i16 = self.metrics.clone();
+        let metrics_in_i32 = self.metrics.clone();
+
+        let input_stream = match in_fmt {
+            cpal::SampleFormat::F32 => input_device.build_input_stream(
+                &input_config,
+                move |data: &[f32], info: &cpal::InputCallbackInfo| {
+                    if let Some(diff) = info
+                        .timestamp()
+                        .callback
+                        .duration_since(&info.timestamp().capture)
+                    {
+                        metrics_in_f32
+                            .input_latency_ms
+                            .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
+                    }
+                    run_input_processing(data, in_channels);
+                },
+                |err| log::error!("Input stream error: {}", err),
+                None,
+            )?,
+            cpal::SampleFormat::I16 => {
+                // Pre-allocate once; the callback reuses (and resizes only on first call).
+                let mut conv_buf: Vec<f32> = Vec::with_capacity(4096);
+                input_device.build_input_stream(
+                    &input_config,
+                    move |data: &[i16], info: &cpal::InputCallbackInfo| {
+                        if let Some(diff) = info
+                            .timestamp()
+                            .callback
+                            .duration_since(&info.timestamp().capture)
+                        {
+                            metrics_in_i16
+                                .input_latency_ms
+                                .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
+                        }
+                        conv_buf.clear();
+                        conv_buf.extend(data.iter().map(|&s| s as f32 / i16::MAX as f32));
+                        run_input_processing(&conv_buf, in_channels);
+                    },
+                    |err| log::error!("Input stream error: {}", err),
+                    None,
+                )?
+            }
+            cpal::SampleFormat::I32 => {
+                let mut conv_buf: Vec<f32> = Vec::with_capacity(4096);
+                input_device.build_input_stream(
+                    &input_config,
+                    move |data: &[i32], info: &cpal::InputCallbackInfo| {
+                        if let Some(diff) = info
+                            .timestamp()
+                            .callback
+                            .duration_since(&info.timestamp().capture)
+                        {
+                            metrics_in_i32
+                                .input_latency_ms
+                                .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
+                        }
+                        conv_buf.clear();
+                        conv_buf.extend(data.iter().map(|&s| s as f32 / i32::MAX as f32));
+                        run_input_processing(&conv_buf, in_channels);
+                    },
+                    |err| log::error!("Input stream error: {}", err),
+                    None,
+                )?
+            }
+            fmt => {
+                return Err(EngineError::DeviceError(format!(
+                    "Input device '{}' uses unsupported sample format {:?}",
+                    input_device.name().unwrap_or_default(),
+                    fmt
+                )));
+            }
+        };
 
         // --- OUTPUT STREAM ---
-        let output_stream = output_device.build_output_stream(
-            &output_config,
-            move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
-                if let Some(diff) = info
-                    .timestamp()
-                    .playback
-                    .duration_since(&info.timestamp().callback)
-                {
-                    metrics_out
-                        .output_latency_ms
-                        .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
-                }
+        // Dispatch on the output device's actual format so that virtual devices
+        // receiving integer PCM (e.g. VB-Audio CABLE in I16 mode) get correctly
+        // converted samples instead of raw f32 bit-patterns.
+        let out_channels_out = output_config.channels as usize;
 
-                let out_channels = output_config.channels as usize;
-                let frames_needed = data.len() / out_channels;
-                metrics_out
-                    .buffer_size
-                    .store(frames_needed as u32, Ordering::Relaxed);
-
-                for i in 0..frames_needed {
-                    let sample = consumer.try_pop().unwrap_or(0.0);
-                    for c in 0..out_channels {
-                        data[i * out_channels + c] = sample;
+        let output_stream = match out_fmt {
+            cpal::SampleFormat::F32 => output_device.build_output_stream(
+                &output_config,
+                move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
+                    if let Some(diff) = info
+                        .timestamp()
+                        .playback
+                        .duration_since(&info.timestamp().callback)
+                    {
+                        metrics_out
+                            .output_latency_ms
+                            .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
                     }
-                }
-                rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
-            },
-            |err| log::error!("Output stream error: {}", err),
-            None,
-        )?;
+                    let frames_needed = data.len() / out_channels_out;
+                    metrics_out
+                        .buffer_size
+                        .store(frames_needed as u32, Ordering::Relaxed);
+                    for i in 0..frames_needed {
+                        let sample = consumer.try_pop().unwrap_or(0.0);
+                        for c in 0..out_channels_out {
+                            data[i * out_channels_out + c] = sample;
+                        }
+                    }
+                    rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
+                },
+                |err| log::error!("Output stream error: {}", err),
+                None,
+            )?,
+            cpal::SampleFormat::I16 => output_device.build_output_stream(
+                &output_config,
+                move |data: &mut [i16], info: &cpal::OutputCallbackInfo| {
+                    if let Some(diff) = info
+                        .timestamp()
+                        .playback
+                        .duration_since(&info.timestamp().callback)
+                    {
+                        metrics_out
+                            .output_latency_ms
+                            .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
+                    }
+                    let frames_needed = data.len() / out_channels_out;
+                    metrics_out
+                        .buffer_size
+                        .store(frames_needed as u32, Ordering::Relaxed);
+                    for i in 0..frames_needed {
+                        let sample = consumer.try_pop().unwrap_or(0.0);
+                        // Clamp first to avoid wrapping on saturating_cast edge cases.
+                        let s16 = (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
+                        for c in 0..out_channels_out {
+                            data[i * out_channels_out + c] = s16;
+                        }
+                    }
+                    rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
+                },
+                |err| log::error!("Output stream error: {}", err),
+                None,
+            )?,
+            cpal::SampleFormat::I32 => output_device.build_output_stream(
+                &output_config,
+                move |data: &mut [i32], info: &cpal::OutputCallbackInfo| {
+                    if let Some(diff) = info
+                        .timestamp()
+                        .playback
+                        .duration_since(&info.timestamp().callback)
+                    {
+                        metrics_out
+                            .output_latency_ms
+                            .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
+                    }
+                    let frames_needed = data.len() / out_channels_out;
+                    metrics_out
+                        .buffer_size
+                        .store(frames_needed as u32, Ordering::Relaxed);
+                    for i in 0..frames_needed {
+                        let sample = consumer.try_pop().unwrap_or(0.0);
+                        let s32 = (sample.clamp(-1.0, 1.0) * i32::MAX as f32) as i32;
+                        for c in 0..out_channels_out {
+                            data[i * out_channels_out + c] = s32;
+                        }
+                    }
+                    rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
+                },
+                |err| log::error!("Output stream error: {}", err),
+                None,
+            )?,
+            fmt => {
+                return Err(EngineError::DeviceError(format!(
+                    "Output device '{}' uses unsupported sample format {:?}",
+                    output_device.name().unwrap_or_default(),
+                    fmt
+                )));
+            }
+        };
 
         input_stream.play()?;
         output_stream.play()?;
 
         self.input_stream = Some(StreamWrapper(input_stream));
         self.output_stream = Some(StreamWrapper(output_stream));
+        let actual_out_name = output_device.name().unwrap_or_default();
+
+        // --- MONITOR STREAM STARTUP ---
+        self.monitor_stream = if let Some(mon_name) = monitor_device_name {
+            let normalized_mon = mon_name.to_lowercase();
+            if normalized_mon == "none" || normalized_mon == "" {
+                println!("Monitor Status: Disabled (None selected)");
+                None
+            } else if mon_name == actual_out_name {
+                println!("Monitor Status: Disabled (Monitor matches Primary Output)");
+                None
+            } else {
+                let mon_device_opt = if mon_name == "Default" {
+                    host.default_output_device()
+                } else {
+                    host.output_devices()
+                        .ok()
+                        .and_then(|mut it| it.find(|d| d.name().ok().as_ref() == Some(&mon_name)))
+                };
+
+                if let Some(mon_device) = mon_device_opt {
+                    log::info!("Opening Monitor Stream: {}", mon_name);
+                    let mon_default = mon_device
+                        .default_output_config()
+                        .unwrap_or_else(|_| output_device.default_output_config().unwrap());
+                    let mon_fmt = mon_default.sample_format();
+                    let mon_cfg: cpal::StreamConfig = mon_default.into();
+                    let mon_channels = mon_cfg.channels as usize;
+
+                    let stream = match mon_fmt {
+                        cpal::SampleFormat::F32 => mon_device
+                            .build_output_stream(
+                                &mon_cfg,
+                                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                                    let frames = data.len() / mon_channels;
+                                    for i in 0..frames {
+                                        let s = mon_consumer.try_pop().unwrap_or(0.0);
+                                        for c in 0..mon_channels {
+                                            data[i * mon_channels + c] = s;
+                                        }
+                                    }
+                                },
+                                |err| log::error!("Monitor stream error: {}", err),
+                                None,
+                            )
+                            .ok(),
+                        cpal::SampleFormat::I16 => mon_device
+                            .build_output_stream(
+                                &mon_cfg,
+                                move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
+                                    let frames = data.len() / mon_channels;
+                                    for i in 0..frames {
+                                        let s = mon_consumer.try_pop().unwrap_or(0.0);
+                                        let s16 = (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
+                                        for c in 0..mon_channels {
+                                            data[i * mon_channels + c] = s16;
+                                        }
+                                    }
+                                },
+                                |err| log::error!("Monitor stream error: {}", err),
+                                None,
+                            )
+                            .ok(),
+                        cpal::SampleFormat::I32 => mon_device
+                            .build_output_stream(
+                                &mon_cfg,
+                                move |data: &mut [i32], _: &cpal::OutputCallbackInfo| {
+                                    let frames = data.len() / mon_channels;
+                                    for i in 0..frames {
+                                        let s = mon_consumer.try_pop().unwrap_or(0.0);
+                                        let s32 = (s.clamp(-1.0, 1.0) * i32::MAX as f32) as i32;
+                                        for c in 0..mon_channels {
+                                            data[i * mon_channels + c] = s32;
+                                        }
+                                    }
+                                },
+                                |err| log::error!("Monitor stream error: {}", err),
+                                None,
+                            )
+                            .ok(),
+                        _ => None,
+                    };
+
+                    if let Some(ref s) = stream {
+                        if s.play().is_ok() {
+                            log::info!("Monitor stream started on '{}'", mon_name);
+                        }
+                    }
+                    stream.map(StreamWrapper)
+                } else {
+                    log::warn!(
+                        "Monitor device '{}' not found; skipping monitor stream.",
+                        mon_name
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        if self.monitor_stream.is_some() {
+            println!("!!! [ENGINE START] Monitor Active !!!");
+        }
 
         log::info!(
-            "Audio engine started successfully (Internal Rate: {}Hz)",
-            internal_sample_rate
+            "Audio engine started successfully (Internal Rate: {}Hz, Monitor: {})",
+            internal_sample_rate,
+            if self.monitor_stream.is_some() {
+                "on"
+            } else {
+                "off"
+            }
         );
         Ok(())
     }
@@ -844,6 +1177,7 @@ impl AudioEngine {
         if self.is_running() {
             self.input_stream = None;
             self.output_stream = None;
+            self.monitor_stream = None;
             if let Ok(mut tx_lock) = self.command_tx.lock() {
                 *tx_lock = None;
             }
