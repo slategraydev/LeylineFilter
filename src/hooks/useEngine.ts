@@ -14,7 +14,6 @@ export function useEngine() {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [inputDevices, setInputDevices] = useState<string[]>([]);
   const [outputDevices, setOutputDevices] = useState<string[]>([]);
-  const [monitorDevice, setMonitorDevice] = useState<string | null>(null);
   const [selectedInput, setSelectedInput] = useState<string>("Default");
   const [selectedOutput, setSelectedOutput] = useState<string>("Default");
   const [engineState, setEngineState] = useState<EngineState | null>(null);
@@ -50,7 +49,6 @@ export function useEngine() {
       setIsMonitoring(state.monitoring_enabled);
       setSelectedInput(state.input_device ?? "Default");
       setSelectedOutput(state.output_device ?? "Default");
-      setMonitorDevice(state.monitor_device ?? null);
     });
   }, []);
 
@@ -95,7 +93,6 @@ export function useEngine() {
             setIsMonitoring(state.monitoring_enabled ?? true);
             setSelectedInput(state.input_device ?? "Default");
             setSelectedOutput(state.output_device ?? "Default");
-            setMonitorDevice(state.monitor_device ?? null);
             setLastVersion(safeMetrics.state_version);
           }
         }
@@ -115,19 +112,14 @@ export function useEngine() {
     }
   };
 
-  const startEngine = async (
-    inputDevice: string,
-    outputDevice: string,
-    monDev?: string | null,
-  ) => {
+  const startEngine = async (inputDevice: string, outputDevice: string) => {
     try {
       console.log(
-        `Starting engine with Input: ${inputDevice}, Output: ${outputDevice}, Monitor: ${monDev ?? "none"}`,
+        `Starting engine with Input: ${inputDevice}, Output: ${outputDevice}`,
       );
       await invoke("start_engine", {
         inputDevice: inputDevice,
         outputDevice: outputDevice,
-        monitorDevice: monDev && monDev !== "None" ? monDev : null,
       });
       setIsRunning(true);
       // Force a state refresh immediately after start
@@ -177,10 +169,8 @@ export function useEngine() {
     isMonitoring,
     inputDevices,
     outputDevices,
-    monitorDevice,
     selectedInput,
     selectedOutput,
-    setMonitorDevice,
     setSelectedInput,
     setSelectedOutput,
     engineState,

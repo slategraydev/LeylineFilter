@@ -181,7 +181,6 @@ pub struct AudioEngine {
     // Device Tracking for Persistence
     input_device_name: Arc<Mutex<Option<String>>>,
     output_device_name: Arc<Mutex<Option<String>>>,
-    monitor_device_name: Arc<Mutex<Option<String>>>,
     // Layout Tracking
     pub positions: Arc<Mutex<HashMap<String, crate::core::persistence::GridPosition>>>,
     pub heights: Arc<Mutex<HashMap<String, u32>>>,
@@ -236,7 +235,6 @@ impl AudioEngine {
                 buffer_size: initial_bs,
                 input_device: Some("Default".to_string()),
                 output_device: Some("Default".to_string()),
-                monitor_device: None,
                 positions: HashMap::new(),
                 heights: HashMap::new(),
                 widths: HashMap::new(),
@@ -249,7 +247,6 @@ impl AudioEngine {
             prefill_samples: 0,
             input_device_name: Arc::new(Mutex::new(Some("Default".to_string()))),
             output_device_name: Arc::new(Mutex::new(Some("Default".to_string()))),
-            monitor_device_name: Arc::new(Mutex::new(None)),
             positions: Arc::new(Mutex::new(HashMap::new())),
             heights: Arc::new(Mutex::new(HashMap::new())),
             widths: Arc::new(Mutex::new(HashMap::new())),
@@ -259,7 +256,6 @@ impl AudioEngine {
     pub fn get_persistence_config(&self) -> crate::core::persistence::AppConfig {
         let in_dev = self.input_device_name.lock().unwrap().clone();
         let out_dev = self.output_device_name.lock().unwrap().clone();
-        let mon_dev = self.monitor_device_name.lock().unwrap().clone();
         let mon_en = self.monitoring_enabled.load(Ordering::Relaxed);
         let running = self.is_running();
 
@@ -270,7 +266,6 @@ impl AudioEngine {
                 mon_en,
                 in_dev.clone(),
                 out_dev.clone(),
-                mon_dev.clone(),
                 self.positions.lock().unwrap().clone(),
                 self.heights.lock().unwrap().clone(),
                 self.widths.lock().unwrap().clone(),
@@ -282,7 +277,6 @@ impl AudioEngine {
         crate::core::persistence::AppConfig {
             input_device: in_dev,
             output_device: out_dev,
-            monitor_device: mon_dev,
             monitoring_enabled: mon_en,
             engine_running: running,
             modules,
@@ -295,7 +289,6 @@ impl AudioEngine {
     pub fn apply_persistence_config(&self, config: crate::core::persistence::AppConfig) {
         *self.input_device_name.lock().unwrap() = config.input_device.clone();
         *self.output_device_name.lock().unwrap() = config.output_device.clone();
-        *self.monitor_device_name.lock().unwrap() = config.monitor_device.clone();
         *self.positions.lock().unwrap() = config.positions.clone();
         *self.heights.lock().unwrap() = config.heights.clone();
         *self.widths.lock().unwrap() = config.widths.clone();
@@ -330,7 +323,6 @@ impl AudioEngine {
                         config.monitoring_enabled,
                         config.input_device,
                         config.output_device,
-                        config.monitor_device,
                         config.positions,
                         config.heights,
                         config.widths,
@@ -351,6 +343,14 @@ impl AudioEngine {
         if let Ok(mut state_lock) = self.chain_state.lock() {
             state_lock.monitoring_enabled = enabled;
             self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
+        }
+
+        // If the engine is running, we need to restart it to actually
+        // open or close the hardware monitor stream.
+        if self.is_running() {
+            let in_dev = self.input_device_name.lock().unwrap().clone();
+            let out_dev = self.output_device_name.lock().unwrap().clone();
+            let _ = self.start(in_dev, out_dev, None);
         }
 
         if let Ok(tx_lock) = self.command_tx.lock() {
@@ -467,11 +467,10 @@ impl AudioEngine {
                     let is_mon = self.monitoring_enabled.load(Ordering::Relaxed);
                     let in_dev = self.input_device_name.lock().unwrap().clone();
                     let out_dev = self.output_device_name.lock().unwrap().clone();
-                    let mon_dev = self.monitor_device_name.lock().unwrap().clone();
                     let pos = self.positions.lock().unwrap().clone();
                     let h = self.heights.lock().unwrap().clone();
                     let w = self.widths.lock().unwrap().clone();
-                    *state_lock = offline.get_state(false, self.buffer_size, is_mon, in_dev, out_dev, mon_dev, pos, h, w);
+                    *state_lock = offline.get_state(false, self.buffer_size, is_mon, in_dev, out_dev, pos, h, w);
                     self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
                 }
             }
@@ -539,7 +538,6 @@ impl AudioEngine {
                 buffer_size: self.buffer_size,
                 input_device: self.input_device_name.lock().unwrap().clone(),
                 output_device: self.output_device_name.lock().unwrap().clone(),
-                monitor_device: self.monitor_device_name.lock().unwrap().clone(),
                 positions: self.positions.lock().unwrap().clone(),
                 heights: self.heights.lock().unwrap().clone(),
                 widths: self.widths.lock().unwrap().clone(),
@@ -564,7 +562,7 @@ impl AudioEngine {
         &mut self,
         input_device_name: Option<String>,
         output_device_name: Option<String>,
-        monitor_device_name: Option<String>,
+        _unused_monitor: Option<String>,
     ) -> EngineResult<()> {
         if self.is_running() {
             log::info!("Restarting engine for device swap...");
@@ -610,7 +608,6 @@ impl AudioEngine {
         println!("!!! [ENGINE START] !!!");
         println!("Requested Input:   {:?}", input_device_name);
         println!("Requested Output:  {:?}", output_device_name);
-        println!("Requested Monitor: {:?}", monitor_device_name);
         println!("Actual Output:     {}", actual_out);
         println!("Primary Input:     {}", actual_in);
 
@@ -620,7 +617,6 @@ impl AudioEngine {
         // Update tracked device names for persistence
         *self.input_device_name.lock().unwrap() = input_device_name.clone();
         *self.output_device_name.lock().unwrap() = output_device_name.clone();
-        *self.monitor_device_name.lock().unwrap() = monitor_device_name.clone();
 
         let input_default = input_device.default_input_config()?;
         let output_default = output_device.default_output_config()?;
@@ -718,13 +714,12 @@ impl AudioEngine {
             let is_mon = self.monitoring_enabled.load(Ordering::Relaxed);
             let in_dev = self.input_device_name.lock().unwrap().clone();
             let out_dev = self.output_device_name.lock().unwrap().clone();
-            let mon_dev = self.monitor_device_name.lock().unwrap().clone();
             let pos = self.positions.lock().unwrap().clone();
             let h = self.heights.lock().unwrap().clone();
             let w = self.widths.lock().unwrap().clone();
 
             for m_info in offline
-                .get_state(false, 0, is_mon, in_dev, out_dev, mon_dev, pos, h, w)
+                .get_state(false, 0, is_mon, in_dev, out_dev, pos, h, w)
                 .modules
             {
                 // Use the module's name and original ID to re-create it
@@ -789,7 +784,6 @@ impl AudioEngine {
                 is_mon,
                 input_device_name.clone(),
                 output_device_name.clone(),
-                monitor_device_name.clone(),
                 pos,
                 h,
                 w,
@@ -894,7 +888,6 @@ impl AudioEngine {
         let chain_state_clone = self.chain_state.clone();
         let in_dev_captured = input_device_name.clone();
         let out_dev_captured = output_device_name.clone();
-        let mon_dev_captured = monitor_device_name.clone();
         let pos_captured = self.positions.clone();
         let h_captured = self.heights.clone();
         let w_captured = self.widths.clone();
@@ -907,6 +900,8 @@ impl AudioEngine {
         // Virtual devices (e.g. VB-Audio CABLE) commonly expose I16 or I32 in WASAPI
         // shared mode, not F32. We convert to F32 at the boundary so the DSP chain
         // always works in float. The conversion is branchless per-sample arithmetic.
+
+        let monitoring_enabled_flag_for_cb = monitoring_enabled_flag.clone();
 
         // Shared inner processing logic, called from each format arm below.
         let mut run_input_processing = {
@@ -941,7 +936,7 @@ impl AudioEngine {
                         }
                         InternalEngineCommand::MidiEvent(_midi) => {}
                         InternalEngineCommand::SetMonitoring(enabled) => {
-                            monitoring_enabled_flag.store(enabled, Ordering::Relaxed);
+                            monitoring_enabled_flag_for_cb.store(enabled, Ordering::Relaxed);
                             chain_changed = true;
                         }
                     }
@@ -952,14 +947,13 @@ impl AudioEngine {
                     mod_lat_atomic.store(total_lat, Ordering::Relaxed);
                     if let Ok(mut state_lock) = chain_state_clone.try_lock() {
                         let current_buf = metrics.buffer_size.load(Ordering::Relaxed);
-                        let is_mon = monitoring_enabled_flag.load(Ordering::Relaxed);
+                        let is_mon = monitoring_enabled_flag_for_cb.load(Ordering::Relaxed);
                         *state_lock = chain.get_state(
                             true,
                             current_buf,
                             is_mon,
                             in_dev_captured.clone(),
                             out_dev_captured.clone(),
-                            mon_dev_captured.clone(),
                             pos_captured.lock().unwrap().clone(),
                             h_captured.lock().unwrap().clone(),
                             w_captured.lock().unwrap().clone(),
@@ -1118,6 +1112,12 @@ impl AudioEngine {
         // converted samples instead of raw f32 bit-patterns.
         let out_channels_out = output_config.channels as usize;
 
+        let actual_out_name = output_device.name().unwrap_or_default();
+        let is_virtual_out = actual_out_name.to_lowercase().contains("cable") ||
+                            actual_out_name.to_lowercase().contains("virtual");
+
+        let monitoring_enabled_for_out = self.monitoring_enabled.clone();
+
         let output_stream = match out_fmt {
             cpal::SampleFormat::F32 => output_device.build_output_stream(
                 &output_config,
@@ -1135,10 +1135,13 @@ impl AudioEngine {
                     metrics_out
                         .buffer_size
                         .store(frames_needed as u32, Ordering::Relaxed);
+
+                    let is_unmuted = monitoring_enabled_for_out.load(Ordering::Relaxed) || is_virtual_out;
+
                     for i in 0..frames_needed {
                         let sample = consumer.try_pop().unwrap_or(0.0);
                         for c in 0..out_channels_out {
-                            data[i * out_channels_out + c] = sample;
+                            data[i * out_channels_out + c] = if is_unmuted { sample } else { 0.0 };
                         }
                     }
                     rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
@@ -1146,63 +1149,75 @@ impl AudioEngine {
                 |err| log::error!("Output stream error: {}", err),
                 None,
             )?,
-            cpal::SampleFormat::I16 => output_device.build_output_stream(
-                &output_config,
-                move |data: &mut [i16], info: &cpal::OutputCallbackInfo| {
-                    if let Some(diff) = info
-                        .timestamp()
-                        .playback
-                        .duration_since(&info.timestamp().callback)
-                    {
+            cpal::SampleFormat::I16 => {
+                let monitoring_enabled_i16 = self.monitoring_enabled.clone();
+                output_device.build_output_stream(
+                    &output_config,
+                    move |data: &mut [i16], info: &cpal::OutputCallbackInfo| {
+                        if let Some(diff) = info
+                            .timestamp()
+                            .playback
+                            .duration_since(&info.timestamp().callback)
+                        {
+                            metrics_out
+                                .output_latency_ms
+                                .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
+                        }
+                        let frames_needed = data.len() / out_channels_out;
                         metrics_out
-                            .output_latency_ms
-                            .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
-                    }
-                    let frames_needed = data.len() / out_channels_out;
-                    metrics_out
-                        .buffer_size
-                        .store(frames_needed as u32, Ordering::Relaxed);
-                    for i in 0..frames_needed {
-                        let sample = consumer.try_pop().unwrap_or(0.0);
-                        // Clamp first to avoid wrapping on saturating_cast edge cases.
-                        let s16 = (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
-                        for c in 0..out_channels_out {
-                            data[i * out_channels_out + c] = s16;
+                            .buffer_size
+                            .store(frames_needed as u32, Ordering::Relaxed);
+
+                        let is_unmuted = monitoring_enabled_i16.load(Ordering::Relaxed) || is_virtual_out;
+
+                        for i in 0..frames_needed {
+                            let sample = consumer.try_pop().unwrap_or(0.0);
+                            let s16 = if is_unmuted { (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16 } else { 0 };
+                            for c in 0..out_channels_out {
+                                data[i * out_channels_out + c] = s16;
+                            }
                         }
-                    }
-                    rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
-                },
-                |err| log::error!("Output stream error: {}", err),
-                None,
-            )?,
-            cpal::SampleFormat::I32 => output_device.build_output_stream(
-                &output_config,
-                move |data: &mut [i32], info: &cpal::OutputCallbackInfo| {
-                    if let Some(diff) = info
-                        .timestamp()
-                        .playback
-                        .duration_since(&info.timestamp().callback)
-                    {
+                        rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
+                    },
+                    |err| log::error!("Output stream error: {}", err),
+                    None,
+                )?
+            },
+            cpal::SampleFormat::I32 => {
+                let monitoring_enabled_i32 = self.monitoring_enabled.clone();
+                output_device.build_output_stream(
+                    &output_config,
+                    move |data: &mut [i32], info: &cpal::OutputCallbackInfo| {
+                        if let Some(diff) = info
+                            .timestamp()
+                            .playback
+                            .duration_since(&info.timestamp().callback)
+                        {
+                            metrics_out
+                                .output_latency_ms
+                                .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
+                        }
+                        let frames_needed = data.len() / out_channels_out;
                         metrics_out
-                            .output_latency_ms
-                            .store((diff.as_secs_f32() * 1000.0).to_bits(), Ordering::Relaxed);
-                    }
-                    let frames_needed = data.len() / out_channels_out;
-                    metrics_out
-                        .buffer_size
-                        .store(frames_needed as u32, Ordering::Relaxed);
-                    for i in 0..frames_needed {
-                        let sample = consumer.try_pop().unwrap_or(0.0);
-                        let s32 = (sample.clamp(-1.0, 1.0) * i32::MAX as f32) as i32;
-                        for c in 0..out_channels_out {
-                            data[i * out_channels_out + c] = s32;
+                            .buffer_size
+                            .store(frames_needed as u32, Ordering::Relaxed);
+
+                        let is_unmuted = monitoring_enabled_i32.load(Ordering::Relaxed) || is_virtual_out;
+
+                        for i in 0..frames_needed {
+                            let sample = consumer.try_pop().unwrap_or(0.0);
+                            let s32 = if is_unmuted { (sample.clamp(-1.0, 1.0) * i32::MAX as f32) as i32 } else { 0 };
+                            for c in 0..out_channels_out {
+                                data[i * out_channels_out + c] = s32;
+                            }
                         }
-                    }
-                    rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
-                },
-                |err| log::error!("Output stream error: {}", err),
-                None,
-            )?,
+                        rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
+                    },
+                    |err| log::error!("Output stream error: {}", err),
+                    None,
+                )?
+            },
+
             fmt => {
                 return Err(EngineError::DeviceError(format!(
                     "Output device '{}' uses unsupported sample format {:?}",
@@ -1217,31 +1232,28 @@ impl AudioEngine {
 
         self.input_stream = Some(StreamWrapper(input_stream));
         self.output_stream = Some(StreamWrapper(output_stream));
-        let actual_out_name = output_device.name().unwrap_or_default();
 
-        // --- MONITOR STREAM STARTUP ---
-        self.monitor_stream = if let Some(mon_name) = monitor_device_name {
-            let normalized_mon = mon_name.to_lowercase();
-            if normalized_mon == "none" || normalized_mon == "" {
-                println!("Monitor Status: Disabled (None selected)");
-                None
-            } else if mon_name == actual_out_name {
-                println!("Monitor Status: Disabled (Monitor matches Primary Output)");
-                None
-            } else {
-                let mon_device_opt = if mon_name == "Default" {
-                    host.default_output_device()
-                } else {
-                    host.output_devices()
-                        .ok()
-                        .and_then(|mut it| it.find(|d| d.name().ok().as_ref() == Some(&mon_name)))
-                };
+        // --- AUTOMATIC MONITOR STARTUP ---
+        // If monitoring is enabled, we determine if a secondary stream is actually needed:
+        // 1. If output is a virtual cable, we MUST open a second stream to the System Default Output
+        //    so the user can hear what's happening.
+        // 2. If output is already a physical device (Speakers), we DO NOT open a second stream
+        //    because the primary output stream already handles the audible audio.
+        self.monitor_stream = if monitoring_enabled_flag.load(Ordering::Relaxed) {
+            let is_virtual = actual_out.to_lowercase().contains("cable") ||
+                            actual_out.to_lowercase().contains("virtual");
+
+            if is_virtual {
+                let mon_device_opt = host.default_output_device();
 
                 if let Some(mon_device) = mon_device_opt {
-                    log::info!("Opening Monitor Stream: {}", mon_name);
+                    let mon_name = mon_device.name().unwrap_or_else(|_| "Unknown".to_string());
+                    log::info!("Opening Automatic Monitor Stream on: {}", mon_name);
+
                     let mon_default = mon_device
                         .default_output_config()
-                        .unwrap_or_else(|_| output_device.default_output_config().unwrap());
+                        .unwrap_or_else(|_| host.default_output_device().unwrap().default_output_config().unwrap());
+
                     let mon_fmt = mon_default.sample_format();
                     let mon_cfg: cpal::StreamConfig = mon_default.into();
                     let mon_channels = mon_cfg.channels as usize;
@@ -1302,22 +1314,20 @@ impl AudioEngine {
 
                     if let Some(ref s) = stream {
                         if s.play().is_ok() {
-                            log::info!("Monitor stream started on '{}'", mon_name);
+                            log::info!("Automatic Monitor started successfully");
                         }
                     }
                     stream.map(StreamWrapper)
                 } else {
-                    log::warn!(
-                        "Monitor device '{}' not found; skipping monitor stream.",
-                        mon_name
-                    );
                     None
                 }
+            } else {
+                // Physical device selected as Output; primary stream handles everything.
+                None
             }
         } else {
             None
         };
-
         if self.monitor_stream.is_some() {
             println!("!!! [ENGINE START] Monitor Active !!!");
         }

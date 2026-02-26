@@ -59,7 +59,6 @@ describe("useEngine", () => {
     expect(invoke).toHaveBeenCalledWith("start_engine", {
       inputDevice: "Mic 1",
       outputDevice: "Speakers 1",
-      monitorDevice: null,
     });
     expect(result.current.isRunning).toBe(true);
   });
@@ -74,7 +73,6 @@ describe("useEngine", () => {
     expect(invoke).toHaveBeenCalledWith("start_engine", {
       inputDevice: "Default",
       outputDevice: "Default",
-      monitorDevice: null,
     });
   });
 

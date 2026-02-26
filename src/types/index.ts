@@ -113,7 +113,6 @@ export interface EngineState {
   buffer_size: number;
   input_device: string | null;
   output_device: string | null;
-  monitor_device: string | null;
   positions: Record<string, GridPosition>;
   heights: Record<string, number>;
   widths: Record<string, number>;

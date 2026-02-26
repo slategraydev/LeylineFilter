@@ -1,10 +1,4 @@
-import {
-  render,
-  screen,
-  waitFor,
-  act,
-  fireEvent,
-} from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import App from "./App";
@@ -128,7 +122,7 @@ describe("App Smoke Test", () => {
     await waitFor(() => expect(latencyDisplay).toHaveTextContent("11 ms"));
   });
 
-  it("syncs layout to backend when positions change", async () => {
+  it("syncs layout and persists to disk when positions change", async () => {
     // Mock get_engine_state to return a module
     vi.mocked(invoke).mockImplementation(async (cmd) => {
       if (cmd === "get_input_devices") return ["Mic 1"];
@@ -142,22 +136,9 @@ describe("App Smoke Test", () => {
       render(<App />);
     });
 
-    // Wait for initial layout sync
+    // Wait for initial layout sync (which now triggers save_to_disk in backend)
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith("update_layout", expect.any(Object));
     });
-  });
-
-  it("triggers save_session when save button is clicked", async () => {
-    await act(async () => {
-      render(<App />);
-    });
-
-    const saveButton = screen.getByText(/Save Session/i);
-    await act(async () => {
-      fireEvent.click(saveButton);
-    });
-
-    expect(invoke).toHaveBeenCalledWith("save_session");
   });
 });

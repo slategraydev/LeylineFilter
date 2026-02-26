@@ -32,9 +32,26 @@ use crate::core::persistence::{AppConfig, GridPosition};
 use std::collections::HashMap;
 use std::fs;
 
+/// Internal helper to persist the engine state to disk.
+fn save_to_disk(app: &tauri::AppHandle, engine: &AudioEngine) -> std::result::Result<(), String> {
+    let config = engine.get_persistence_config();
+    let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+
+    if !config_dir.exists() {
+        let _ = fs::create_dir_all(&config_dir);
+    }
+
+    let config_path = config_dir.join("session.json");
+    let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    fs::write(config_path, json).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 /// Tauri command to update the layout metadata.
 #[tauri::command]
 async fn update_layout(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     positions: HashMap<String, GridPosition>,
     heights: HashMap<String, u32>,
@@ -44,6 +61,9 @@ async fn update_layout(
     *engine.positions.lock().unwrap() = positions;
     *engine.heights.lock().unwrap() = heights;
     *engine.widths.lock().unwrap() = widths;
+
+    // Auto-save layout changes
+    let _ = save_to_disk(&app, &engine);
     Ok(())
 }
 
@@ -54,19 +74,7 @@ async fn save_session(
     state: State<'_, AppState>,
 ) -> std::result::Result<(), String> {
     let engine = state.engine.lock().map_err(|e| e.to_string())?;
-    let config = engine.get_persistence_config();
-
-    let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
-    if !config_dir.exists() {
-        fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
-    }
-
-    let config_path = config_dir.join("session.json");
-    let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    fs::write(config_path, json).map_err(|e| e.to_string())?;
-
-    log::info!("Session saved successfully");
-    Ok(())
+    save_to_disk(&app, &engine)
 }
 
 /// Tauri command to load the session from disk.
@@ -93,7 +101,7 @@ async fn load_session(
         let _ = engine.start(
             config.input_device,
             config.output_device,
-            config.monitor_device,
+            None,
         );
     }
 
@@ -104,11 +112,15 @@ async fn load_session(
 /// Tauri command to update a module's configuration.
 #[tauri::command]
 async fn update_config(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     config: ModuleConfig,
 ) -> std::result::Result<(), String> {
     let engine = state.engine.lock().map_err(|e| e.to_string())?;
     engine.update_module_config(config);
+
+    // Auto-save config changes
+    let _ = save_to_disk(&app, &engine);
     Ok(())
 }
 
@@ -122,26 +134,34 @@ async fn get_engine_state(state: State<'_, AppState>) -> std::result::Result<Eng
 /// Tauri command to send a command to the engine.
 #[tauri::command]
 async fn send_command(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     command: EngineCommand,
 ) -> std::result::Result<(), String> {
     let engine = state.engine.lock().map_err(|e| e.to_string())?;
     engine.send_command(command);
+
+    // Auto-save on module add/remove/reorder
+    let _ = save_to_disk(&app, &engine);
     Ok(())
 }
 
 /// Tauri command to start the audio engine.
 #[tauri::command]
 async fn start_engine(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input_device: Option<String>,
     output_device: Option<String>,
-    monitor_device: Option<String>,
 ) -> std::result::Result<(), String> {
     let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
     engine
-        .start(input_device, output_device, monitor_device)
-        .map_err(|e| e.to_string())
+        .start(input_device, output_device, None)
+        .map_err(|e| e.to_string())?;
+
+    // Auto-save device selection and running state
+    let _ = save_to_disk(&app, &engine);
+    Ok(())
 }
 
 /// Tauri command to get available output devices.
@@ -168,19 +188,29 @@ async fn get_input_devices(state: State<'_, AppState>) -> std::result::Result<Ve
 
 /// Tauri command to stop the audio engine.
 #[tauri::command]
-async fn stop_engine(state: State<'_, AppState>) -> std::result::Result<(), String> {
+async fn stop_engine(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> std::result::Result<(), String> {
     let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
     engine.stop();
+
+    // Auto-save stopped state
+    let _ = save_to_disk(&app, &engine);
     Ok(())
 }
 
 #[tauri::command]
 async fn set_monitoring(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     enabled: bool,
 ) -> std::result::Result<(), String> {
     let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
     engine.set_monitoring(enabled);
+
+    // Auto-save monitoring state
+    let _ = save_to_disk(&app, &engine);
     Ok(())
 }
 
@@ -325,7 +355,7 @@ pub fn run() {
                                     let _ = engine.start(
                                         config.input_device,
                                         config.output_device,
-                                        config.monitor_device,
+                                        None,
                                     );
                                 }
                                 log::info!("Auto-loaded session from disk");

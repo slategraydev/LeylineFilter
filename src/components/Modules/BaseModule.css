@@ -262,19 +262,20 @@
     content: "";
     height: 0.85em;
     width: 0.85em;
-    left: 0.25em;
-    bottom: 0.25em;
+    left: calc(0.275em - 1px);
+    top: 50%;
+    transform: translateY(-50%);
     background-color: var(--color-text-dim);
     transition: 0.2s;
 }
 
-input:checked+.slider {
+input:checked + .slider {
     border-color: var(--color-accent);
     background-color: rgba(170, 65, 65, 0.1);
 }
 
-input:checked+.slider:before {
-    transform: translateX(1.3em);
+input:checked + .slider:before {
+    transform: translate(1.4em, -50%);
     background-color: var(--color-accent);
 }
 
@@ -338,16 +339,20 @@ input:checked+.slider:before {
     height: 1.5em;
     cursor: nwse-resize;
     z-index: 10;
-    background: linear-gradient(135deg,
-            transparent 50%,
-            rgba(255, 255, 255, 0.1) 50%);
+    background: linear-gradient(
+        135deg,
+        transparent 50%,
+        rgba(255, 255, 255, 0.1) 50%
+    );
     transition: background 0.2s;
 }
 
 .resize-handle:hover {
-    background: linear-gradient(135deg,
-            transparent 50%,
-            var(--color-accent) 50%);
+    background: linear-gradient(
+        135deg,
+        transparent 50%,
+        var(--color-accent) 50%
+    );
 }
 
 .module-card.resizing {

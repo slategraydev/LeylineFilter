@@ -19,7 +19,6 @@ pub struct GridPosition {
 pub struct AppConfig {
     pub input_device: Option<String>,
     pub output_device: Option<String>,
-    pub monitor_device: Option<String>,
     pub monitoring_enabled: bool,
     pub engine_running: bool,
     pub modules: Vec<ModuleInfo>,
@@ -34,7 +33,6 @@ impl Default for AppConfig {
         Self {
             input_device: Some("Default".to_string()),
             output_device: Some("Default".to_string()),
-            monitor_device: None,
             monitoring_enabled: false,
             engine_running: false,
             modules: Vec::new(),
@@ -54,6 +52,7 @@ mod tests {
         let config = AppConfig::default();
         assert_eq!(config.input_device, Some("Default".to_string()));
         assert!(!config.engine_running);
+        assert!(!config.monitoring_enabled);
         assert!(config.modules.is_empty());
     }
 

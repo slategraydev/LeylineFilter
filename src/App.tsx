@@ -47,12 +47,11 @@ import "./App.css";
 function App() {
   const {
     isRunning,
+    isMonitoring,
     inputDevices,
     outputDevices,
-    monitorDevice,
     selectedInput,
     selectedOutput,
-    setMonitorDevice,
     setSelectedInput,
     setSelectedOutput,
     engineState,
@@ -294,23 +293,14 @@ function App() {
   const handleInputChange = (device: string) => {
     setSelectedInput(device);
     if (isRunning) {
-      startEngine(device, selectedOutput, monitorDevice);
+      startEngine(device, selectedOutput);
     }
   };
 
   const handleOutputChange = (device: string) => {
     setSelectedOutput(device);
     if (isRunning) {
-      startEngine(selectedInput, device, monitorDevice);
-    }
-  };
-
-  const handleMonitorChange = (device: string) => {
-    const dev = device === "None" ? null : device;
-    setMonitorDevice(dev);
-    setMonitoring(dev !== null);
-    if (isRunning) {
-      startEngine(selectedInput, selectedOutput, dev);
+      startEngine(selectedInput, device);
     }
   };
 
@@ -318,7 +308,7 @@ function App() {
     if (isRunning) {
       stopEngine();
     } else {
-      startEngine(selectedInput, selectedOutput, monitorDevice);
+      startEngine(selectedInput, selectedOutput);
     }
   };
 
@@ -558,10 +548,10 @@ function App() {
               outputDevices={outputDevices}
               selectedInput={selectedInput}
               selectedOutput={selectedOutput}
-              selectedMonitor={monitorDevice ?? "None"}
+              isMonitoring={isMonitoring}
               onInputChange={handleInputChange}
               onOutputChange={handleOutputChange}
-              onMonitorChange={handleMonitorChange}
+              onMonitoringChange={setMonitoring}
             />
           </div>
 
@@ -606,14 +596,6 @@ function App() {
         </div>
 
         <div className="sidebar-footer">
-          <button
-            className="save-session-btn"
-            onClick={() => {
-              invoke("save_session").then(() => console.log("Session Saved"));
-            }}
-          >
-            Save Session
-          </button>
           <button
             className={`engine-toggle ${isRunning ? "stop" : "start"}`}
             onClick={toggleEngine}
