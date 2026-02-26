@@ -17,22 +17,22 @@ export function Oscilloscope({ waveform, isRunning }: OscilloscopeProps) {
 
   // Persisted state for smoothing and decay
   const internalWaveform = useRef<number[]>(Array(64).fill(0));
-  const lastUpdate = useRef<number>(Date.now());
+  const waveformRef = useRef<number[]>(waveform);
+  const isRunningRef = useRef<boolean>(isRunning);
 
-  // 1. Animation Loop & Physics
+  // Keep refs up-to-date without restarting the animation loop
+  useEffect(() => { waveformRef.current = waveform; }, [waveform]);
+  useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
+
+  // 1. Animation Loop & Physics - starts once, reads from refs
   useEffect(() => {
     const frameInterval = 25; // ~40fps
     const timer = setInterval(() => {
-      const now = Date.now();
-      lastUpdate.current = now;
-
       // Target waveform selection
       // Backend now applies Hann windowing, so endpoints are naturally zero
-      const target = isRunning ? waveform : Array(64).fill(0);
+      const target = isRunningRef.current ? waveformRef.current : Array(64).fill(0);
 
       for (let i = 0; i < 64; i++) {
-        // Target waveform selection
-        // Backend now applies Hann windowing, so endpoints are naturally zero
         const targetVal = target[i] || 0;
 
         // Remove smoothing for instant, raw response as requested
@@ -43,7 +43,7 @@ export function Oscilloscope({ waveform, isRunning }: OscilloscopeProps) {
     }, frameInterval);
 
     return () => clearInterval(timer);
-  }, [waveform, isRunning]);
+  }, []);
 
   // 2. Canvas Drawing
   useEffect(() => {
