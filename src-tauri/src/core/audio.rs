@@ -65,7 +65,7 @@ impl EngineMetrics {
             output_latency_ms: AtomicU32::new(0),
             cpu_usage: AtomicU32::new(0),
             input_level: AtomicU32::new(0),
-            input_level_db: AtomicU32::new(0),
+            input_level_db: AtomicU32::new((-60.0_f32).to_bits()),
             buffer_size: AtomicU32::new(256),
             spectrum: Default::default(),
             tonality: Default::default(),

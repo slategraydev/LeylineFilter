@@ -9,12 +9,19 @@ interface LimiterModuleProps {
   heightUnits: number;
   widthUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
-  onDrag?: (id: string, pos: GridPosition | null) => void;
+  onDrag?: (
+    id: string,
+    pos: GridPosition | null,
+    rawOffset?: { x: number; y: number },
+    continuousPos?: GridPosition,
+  ) => void;
   onHeightReport?: (id: string, h: number) => void;
+  onWidthReport?: (id: string, units: number) => void;
   config: LimiterConfig;
   onUpdate: (config: LimiterConfig) => void;
   onRemove: () => void;
   onToggle: (enabled: boolean) => void;
+  style?: React.CSSProperties;
   isNewlyPlaced?: boolean;
 }
 
@@ -26,6 +33,7 @@ export const LimiterModule: React.FC<LimiterModuleProps> = ({
   onPositionChange,
   onDrag,
   onHeightReport,
+  onWidthReport,
   config,
   onUpdate,
   onRemove,
@@ -41,6 +49,7 @@ export const LimiterModule: React.FC<LimiterModuleProps> = ({
       onPositionChange={onPositionChange}
       onDrag={onDrag}
       onHeightReport={onHeightReport}
+      onWidthReport={onWidthReport}
       title="Brickwall Limiter"
       enabled={config.enabled}
       onToggle={onToggle}

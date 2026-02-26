@@ -58,17 +58,18 @@ export function EngineControls({
       </div>
 
       <div className="monitoring-toggle">
-        <label className="monitor-label">
+        <div className="monitor-label">
           Monitor Processed Audio
           <label className="switch">
             <input
               type="checkbox"
               checked={isMonitoring}
               onChange={(e) => onToggleMonitoring(e.target.checked)}
+              aria-label="Monitor Processed Audio"
             />
             <span className="slider round"></span>
           </label>
-        </label>
+        </div>
       </div>
     </div>
   );

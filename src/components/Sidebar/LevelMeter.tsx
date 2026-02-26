@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './LevelMeter.css';
 
 interface LevelMeterProps {
@@ -9,17 +9,29 @@ interface LevelMeterProps {
 export function LevelMeter({ db, label }: LevelMeterProps) {
     const peakRef = useRef(-100);
     const lastPeakTimeRef = useRef(Date.now());
+    const [, forceUpdate] = useState(0);
 
-    // Track peak with decay
+    // Track peak when db rises
     useEffect(() => {
         if (db > peakRef.current) {
             peakRef.current = db;
             lastPeakTimeRef.current = Date.now();
-        } else if (Date.now() - lastPeakTimeRef.current > 1000) {
-            // Slow decay after 1 second
-            peakRef.current = Math.max(-100, peakRef.current - 0.5);
         }
     }, [db]);
+
+    // Decay loop - runs on an interval so peak falls even when db is steady
+    useEffect(() => {
+        const timer = setInterval(() => {
+            if (Date.now() - lastPeakTimeRef.current > 1000) {
+                const next = Math.max(-100, peakRef.current - 0.5);
+                if (next !== peakRef.current) {
+                    peakRef.current = next;
+                    forceUpdate((n) => n + 1);
+                }
+            }
+        }, 100);
+        return () => clearInterval(timer);
+    }, []);
 
     // Normalize dB (-60 to 0) to percentage (0 to 100)
     const normalize = (val: number) => {
