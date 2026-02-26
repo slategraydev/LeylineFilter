@@ -89,6 +89,25 @@ pub enum ModuleConfig {
     None,
 }
 
+impl ModuleConfig {
+    pub fn type_name(&self) -> &str {
+        match self {
+            ModuleConfig::Expander { .. } => "Expander",
+            ModuleConfig::RNNoise { .. } => "RNNoise",
+            ModuleConfig::Gain { .. } => "Gain",
+            ModuleConfig::Compressor { .. } => "Compressor",
+            ModuleConfig::Filter { .. } => "Filter",
+            ModuleConfig::ParametricEQ { .. } => "ParametricEQ",
+            ModuleConfig::Deesser { .. } => "Deesser",
+            ModuleConfig::Saturation { .. } => "Saturation",
+            ModuleConfig::Limiter { .. } => "Limiter",
+            ModuleConfig::Dereverb { .. } => "Dereverb",
+            ModuleConfig::FX { .. } => "FX",
+            ModuleConfig::None => "None",
+        }
+    }
+}
+
 /// A MIDI message for synth and parameter control.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MidiMessage {

@@ -1427,4 +1427,36 @@ mod tests {
         // Channel should be empty now
         assert!(engine.garbage_rx.as_ref().unwrap().is_empty());
     }
+
+    #[test]
+    fn test_persistence_sync() {
+        let engine = AudioEngine::new();
+
+        // Setup some state
+        *engine.input_device_name.lock().unwrap() = Some("Test Input".to_string());
+        engine.monitoring_enabled.store(true, Ordering::SeqCst);
+
+        // Add a module - this adds to offline_chain automatically
+        engine.send_command(EngineCommand::AddModule {
+            module_type: "Gain".to_string()
+        });
+
+        // Get config
+        let config = engine.get_persistence_config();
+        assert_eq!(config.input_device, Some("Test Input".to_string()));
+        assert_eq!(config.monitoring_enabled, true);
+        assert_eq!(config.modules.len(), 1);
+        assert_eq!(config.modules[0].config.type_name(), "Gain");
+
+        // Create new engine and apply config
+        let engine2 = AudioEngine::new();
+        engine2.apply_persistence_config(config);
+
+        assert_eq!(*engine2.input_device_name.lock().unwrap(), Some("Test Input".to_string()));
+        assert_eq!(engine2.monitoring_enabled.load(Ordering::SeqCst), true);
+
+        // Apply should have added module to offline_chain
+        let chain2 = engine2.offline_chain.lock().unwrap();
+        assert_eq!(chain2.modules().len(), 1);
+    }
 }
