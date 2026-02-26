@@ -1,6 +1,5 @@
-import { FilterConfig } from "../../types";
+import { FilterConfig, GridPosition } from "../../types";
 import { BaseModule } from "./BaseModule";
-import { GridPosition } from "../../hooks/useDraggable";
 
 interface FilterModuleProps {
   id: string;

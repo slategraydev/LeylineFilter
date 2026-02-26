@@ -1,7 +1,6 @@
 import React from "react";
-import { GainConfig } from "../../types";
+import { GainConfig, GridPosition } from "../../types";
 import { BaseModule } from "./BaseModule";
-import { GridPosition } from "../../hooks/useDraggable";
 
 interface Props {
   id: string;

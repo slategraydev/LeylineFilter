@@ -1,7 +1,6 @@
 import React from "react";
 import { BaseModule } from "./BaseModule";
-import { LimiterConfig } from "../../types";
-import { GridPosition } from "../../hooks/useDraggable";
+import { LimiterConfig, GridPosition } from "../../types";
 
 interface LimiterModuleProps {
   id: string;

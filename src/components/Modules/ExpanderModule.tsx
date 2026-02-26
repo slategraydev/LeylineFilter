@@ -1,6 +1,5 @@
-import { ExpanderConfig } from "../../types";
+import { ExpanderConfig, GridPosition } from "../../types";
 import { BaseModule } from "./BaseModule";
-import { GridPosition } from "../../hooks/useDraggable";
 
 interface ExpanderModuleProps {
   id: string;

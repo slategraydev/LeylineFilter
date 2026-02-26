@@ -102,6 +102,12 @@ impl SignalChain {
         is_running: bool,
         buffer_size: u32,
         monitoring_enabled: bool,
+        input_device: Option<String>,
+        output_device: Option<String>,
+        monitor_device: Option<String>,
+        positions: std::collections::HashMap<String, crate::core::persistence::GridPosition>,
+        heights: std::collections::HashMap<String, u32>,
+        widths: std::collections::HashMap<String, u32>,
     ) -> EngineState {
         let modules = self
             .modules
@@ -121,6 +127,12 @@ impl SignalChain {
             monitoring_enabled,
             sample_rate: self.sample_rate,
             buffer_size,
+            input_device,
+            output_device,
+            monitor_device,
+            positions,
+            heights,
+            widths,
         }
     }
 }
@@ -128,6 +140,7 @@ impl SignalChain {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use crate::core::modules::ModuleFactory;
 
     #[test]
@@ -149,7 +162,7 @@ mod tests {
         assert_eq!(chain.modules()[1].id(), id1);
 
         // State
-        let state = chain.get_state(true, 256, true);
+        let state = chain.get_state(true, 256, true, None, None, None, HashMap::new(), HashMap::new(), HashMap::new());
         assert_eq!(state.modules.len(), 2);
         assert!(state.is_running);
         assert_eq!(state.buffer_size, 256);

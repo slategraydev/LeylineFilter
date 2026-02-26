@@ -1,6 +1,5 @@
-import { SaturationConfig } from "../../types";
+import { SaturationConfig, GridPosition } from "../../types";
 import { BaseModule } from "./BaseModule";
-import { GridPosition } from "../../hooks/useDraggable";
 
 interface SaturationModuleProps {
   id: string;

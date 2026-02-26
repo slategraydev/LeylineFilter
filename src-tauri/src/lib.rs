@@ -28,6 +28,79 @@ pub struct AppState {
     pub engine: Arc<Mutex<AudioEngine>>,
 }
 
+use crate::core::persistence::{AppConfig, GridPosition};
+use std::collections::HashMap;
+use std::fs;
+
+/// Tauri command to update the layout metadata.
+#[tauri::command]
+async fn update_layout(
+    state: State<'_, AppState>,
+    positions: HashMap<String, GridPosition>,
+    heights: HashMap<String, u32>,
+    widths: HashMap<String, u32>,
+) -> std::result::Result<(), String> {
+    let engine = state.engine.lock().map_err(|e| e.to_string())?;
+    *engine.positions.lock().unwrap() = positions;
+    *engine.heights.lock().unwrap() = heights;
+    *engine.widths.lock().unwrap() = widths;
+    Ok(())
+}
+
+/// Tauri command to save the current session to disk.
+#[tauri::command]
+async fn save_session(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> std::result::Result<(), String> {
+    let engine = state.engine.lock().map_err(|e| e.to_string())?;
+    let config = engine.get_persistence_config();
+
+    let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    if !config_dir.exists() {
+        fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
+    }
+
+    let config_path = config_dir.join("session.json");
+    let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    fs::write(config_path, json).map_err(|e| e.to_string())?;
+
+    log::info!("Session saved successfully");
+    Ok(())
+}
+
+/// Tauri command to load the session from disk.
+#[tauri::command]
+async fn load_session(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> std::result::Result<(), String> {
+    let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let config_path = config_dir.join("session.json");
+
+    if !config_path.exists() {
+        return Err("No saved session found".to_string());
+    }
+
+    let json = fs::read_to_string(config_path).map_err(|e| e.to_string())?;
+    let config: AppConfig = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+
+    let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
+    engine.apply_persistence_config(config.clone());
+
+    // If it was running, try to restart it
+    if config.engine_running {
+        let _ = engine.start(
+            config.input_device,
+            config.output_device,
+            config.monitor_device,
+        );
+    }
+
+    log::info!("Session loaded successfully");
+    Ok(())
+}
+
 /// Tauri command to update a module's configuration.
 #[tauri::command]
 async fn update_config(
@@ -236,6 +309,32 @@ pub fn run() {
             _ => {}
         })
         .setup(|app| {
+            // --- Auto-Load Persistence ---
+            let app_handle = app.handle();
+            let state = app_handle.state::<AppState>();
+
+            // Re-use logic from load_session command for cold-start initialization
+            if let Ok(config_dir) = app_handle.path().app_config_dir() {
+                let config_path = config_dir.join("session.json");
+                if config_path.exists() {
+                    if let Ok(json) = fs::read_to_string(config_path) {
+                        if let Ok(config) = serde_json::from_str::<AppConfig>(&json) {
+                            if let Ok(mut engine) = state.engine.lock() {
+                                engine.apply_persistence_config(config.clone());
+                                if config.engine_running {
+                                    let _ = engine.start(
+                                        config.input_device,
+                                        config.output_device,
+                                        config.monitor_device,
+                                    );
+                                }
+                                log::info!("Auto-loaded session from disk");
+                            }
+                        }
+                    }
+                }
+            }
+
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
 
@@ -292,13 +391,30 @@ pub fn run() {
             get_input_devices,
             get_output_devices,
             get_engine_state,
-            send_command
+            send_command,
+            save_session,
+            load_session,
+            update_layout
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
                 log::info!("Application exiting...");
+
+                // --- Auto-Save on Exit ---
+                let state = app_handle.state::<AppState>();
+                if let Ok(engine) = state.engine.lock() {
+                    let config = engine.get_persistence_config();
+                    if let Ok(config_dir) = app_handle.path().app_config_dir() {
+                        let config_path = config_dir.join("session.json");
+                        if let Ok(json) = serde_json::to_string_pretty(&config) {
+                            let _ = fs::write(config_path, json);
+                            log::info!("Auto-saved session on exit");
+                        }
+                    }
+                }
+
                 let _ = app_handle
                     .state::<AppState>()
                     .engine

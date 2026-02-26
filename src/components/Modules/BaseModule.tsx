@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
 import React, { useLayoutEffect, useRef } from "react";
-import { useDraggable, GridPosition } from "../../hooks/useDraggable";
+import { useDraggable } from "../../hooks/useDraggable";
+import { GridPosition } from "../../types";
 import { GRID_UNIT_PX } from "../../constants";
 import "./BaseModule.css";
 

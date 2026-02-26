@@ -15,6 +15,8 @@ export function useEngine() {
   const [inputDevices, setInputDevices] = useState<string[]>([]);
   const [outputDevices, setOutputDevices] = useState<string[]>([]);
   const [monitorDevice, setMonitorDevice] = useState<string | null>(null);
+  const [selectedInput, setSelectedInput] = useState<string>("Default");
+  const [selectedOutput, setSelectedOutput] = useState<string>("Default");
   const [engineState, setEngineState] = useState<EngineState | null>(null);
   const [metrics, setMetrics] = useState<EngineMetrics>({
     latency_ms: 0,
@@ -45,6 +47,10 @@ export function useEngine() {
     invoke<EngineState>("get_engine_state").then((state) => {
       setEngineState(state);
       setIsRunning(state.is_running);
+      setIsMonitoring(state.monitoring_enabled);
+      setSelectedInput(state.input_device ?? "Default");
+      setSelectedOutput(state.output_device ?? "Default");
+      setMonitorDevice(state.monitor_device ?? null);
     });
   }, []);
 
@@ -87,6 +93,9 @@ export function useEngine() {
             setEngineState(state);
             setIsRunning(state.is_running ?? false);
             setIsMonitoring(state.monitoring_enabled ?? true);
+            setSelectedInput(state.input_device ?? "Default");
+            setSelectedOutput(state.output_device ?? "Default");
+            setMonitorDevice(state.monitor_device ?? null);
             setLastVersion(safeMetrics.state_version);
           }
         }
@@ -106,7 +115,11 @@ export function useEngine() {
     }
   };
 
-  const startEngine = async (inputDevice: string, outputDevice: string, monDev?: string | null) => {
+  const startEngine = async (
+    inputDevice: string,
+    outputDevice: string,
+    monDev?: string | null,
+  ) => {
     try {
       console.log(
         `Starting engine with Input: ${inputDevice}, Output: ${outputDevice}, Monitor: ${monDev ?? "none"}`,
@@ -165,7 +178,11 @@ export function useEngine() {
     inputDevices,
     outputDevices,
     monitorDevice,
+    selectedInput,
+    selectedOutput,
     setMonitorDevice,
+    setSelectedInput,
+    setSelectedOutput,
     engineState,
     metrics,
     startEngine,

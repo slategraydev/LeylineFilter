@@ -184,6 +184,29 @@ body {
     border-color: var(--color-accent);
 }
 
+.save-session-btn {
+    width: 100%;
+    padding: 10px;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-dim);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+}
+
+.save-session-btn:hover {
+    border-color: #444;
+    color: var(--color-text-main);
+}
+
 .engine-toggle {
     width: 100%;
     padding: 12px;
@@ -191,7 +214,7 @@ body {
     border: 1px solid var(--color-accent);
     color: var(--color-text-main);
     font-family: var(--font-mono);
-    font-size: 1.0rem;
+    font-size: 1rem;
     text-transform: uppercase;
     font-weight: bold;
     cursor: pointer;
@@ -400,7 +423,6 @@ body {
 }
 
 @keyframes diamond-pulse {
-
     0%,
     100% {
         opacity: 0.4;
@@ -412,7 +434,8 @@ body {
         opacity: 1;
         transform: scale(1);
         stroke: var(--color-mauve);
-        filter: drop-shadow(0 0 10px var(--color-mauve)) drop-shadow(0 0 5px var(--color-mauve));
+        filter: drop-shadow(0 0 10px var(--color-mauve))
+            drop-shadow(0 0 5px var(--color-mauve));
     }
 }
 
