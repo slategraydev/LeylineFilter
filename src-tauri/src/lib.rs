@@ -8,7 +8,12 @@ use crate::core::audio::AudioEngine;
 use crate::core::traits::{EngineCommand, EngineState, ModuleConfig};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
-use tauri::{Manager, State};
+use tauri::{
+    menu::{CheckMenuItem, Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager, State, WindowEvent,
+};
+use tauri_plugin_autostart::ManagerExt;
 
 /// Global application state.
 ///
@@ -204,8 +209,80 @@ pub fn run() {
     };
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--hidden"]),
+        ))
         .plugin(tauri_plugin_opener::init())
         .manage(state)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "quit" => {
+                app.exit(0);
+            }
+            "show" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.show().unwrap();
+                    window.set_focus().unwrap();
+                }
+            }
+            "autostart" => {
+                let autolaunch = app.autolaunch();
+                if autolaunch.is_enabled().unwrap_or(false) {
+                    let _ = autolaunch.disable();
+                } else {
+                    let _ = autolaunch.enable();
+                }
+            }
+            _ => {}
+        })
+        .setup(|app| {
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
+
+            let is_autostart = app.autolaunch().is_enabled().unwrap_or(false);
+            let autostart_i = CheckMenuItem::with_id(
+                app,
+                "autostart",
+                "Start on Boot",
+                true,
+                is_autostart,
+                None::<&str>,
+            )?;
+
+            // Tray Menu
+            let tray_menu = Menu::with_items(app, &[&show_i, &autostart_i, &quit_i])?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| match event {
+                    TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } => {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            if window.is_visible().unwrap_or(false) {
+                                window.hide().unwrap();
+                            } else {
+                                window.show().unwrap();
+                                window.set_focus().unwrap();
+                            }
+                        }
+                    }
+                    _ => {}
+                })
+                .build(app)?;
+
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                window.hide().unwrap();
+                api.prevent_close();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             start_engine,
             stop_engine,

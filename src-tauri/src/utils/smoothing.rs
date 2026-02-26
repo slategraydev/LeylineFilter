@@ -58,7 +58,8 @@ impl ParameterSmoother {
         if (self.current_value - self.target_value).abs() < 1e-6 {
             self.current_value = self.target_value;
         } else {
-            self.current_value = self.coeff * (self.current_value - self.target_value) + self.target_value;
+            self.current_value =
+                self.coeff * (self.current_value - self.target_value) + self.target_value;
         }
         self.current_value
     }
