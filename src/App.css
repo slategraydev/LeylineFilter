@@ -89,7 +89,6 @@ body {
     /* Firefox */
 }
 
-
 .sidebar header {
     padding: 20px;
     border-bottom: none;
@@ -410,7 +409,6 @@ body {
 }
 
 @keyframes diamond-pulse {
-
     0%,
     100% {
         opacity: 0.4;
@@ -422,7 +420,8 @@ body {
         opacity: 1;
         transform: scale(1);
         stroke: var(--color-mauve);
-        filter: drop-shadow(0 0 10px var(--color-mauve)) drop-shadow(0 0 5px var(--color-mauve));
+        filter: drop-shadow(0 0 10px var(--color-mauve))
+            drop-shadow(0 0 5px var(--color-mauve));
     }
 }
 
@@ -444,7 +443,6 @@ body {
     background-position: calc(100% - 0.6em) center;
     background-size: 0.8em;
 }
-
 
 .custom-select:hover {
     border-color: #444;

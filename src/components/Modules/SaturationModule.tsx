@@ -65,44 +65,46 @@ export function SaturationModule({
       <div className="control-group">
         <label>
           Drive <span>{config.drive.toFixed(1)}x</span>
+          <input
+            type="range"
+            min="1.0"
+            max="10.0"
+            step="0.1"
+            value={config.drive}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              updateConfig({ drive: parseFloat(e.target.value) })
+            }
+          />
         </label>
-        <input
-          type="range"
-          min="1.0"
-          max="10.0"
-          step="0.1"
-          value={config.drive}
-          disabled={!config.enabled}
-          onChange={(e) => updateConfig({ drive: parseFloat(e.target.value) })}
-        />
       </div>
       <div className="control-group">
         <label>
           Tilt (EQ Bias) <span>{config.tilt.toFixed(1)} dB</span>
+          <input
+            type="range"
+            min="-12.0"
+            max="12.0"
+            step="0.1"
+            value={config.tilt}
+            disabled={!config.enabled}
+            onChange={(e) => updateConfig({ tilt: parseFloat(e.target.value) })}
+          />
         </label>
-        <input
-          type="range"
-          min="-12.0"
-          max="12.0"
-          step="0.1"
-          value={config.tilt}
-          disabled={!config.enabled}
-          onChange={(e) => updateConfig({ tilt: parseFloat(e.target.value) })}
-        />
       </div>
       <div className="control-group">
         <label>
           Mix <span>{Math.round(config.mix * 100)}%</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={config.mix}
+            disabled={!config.enabled}
+            onChange={(e) => updateConfig({ mix: parseFloat(e.target.value) })}
+          />
         </label>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={config.mix}
-          disabled={!config.enabled}
-          onChange={(e) => updateConfig({ mix: parseFloat(e.target.value) })}
-        />
       </div>
     </BaseModule>
   );

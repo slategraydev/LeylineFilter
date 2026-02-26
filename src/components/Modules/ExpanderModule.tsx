@@ -66,64 +66,66 @@ export function ExpanderModule({
         <label>
           Threshold{" "}
           <span>{(20 * Math.log10(config.threshold)).toFixed(1)} dB</span>
+          <input
+            type="range"
+            min="0.0001"
+            max="0.5"
+            step="0.0001"
+            value={config.threshold}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              updateConfig({ threshold: parseFloat(e.target.value) })
+            }
+          />
         </label>
-        <input
-          type="range"
-          min="0.0001"
-          max="0.5"
-          step="0.0001"
-          value={config.threshold}
-          disabled={!config.enabled}
-          onChange={(e) =>
-            updateConfig({ threshold: parseFloat(e.target.value) })
-          }
-        />
       </div>
       <div className="control-group">
         <label>
           Ratio <span>{config.ratio.toFixed(1)}:1</span>
+          <input
+            type="range"
+            min="1.0"
+            max="10.0"
+            step="0.1"
+            value={config.ratio}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              updateConfig({ ratio: parseFloat(e.target.value) })
+            }
+          />
         </label>
-        <input
-          type="range"
-          min="1.0"
-          max="10.0"
-          step="0.1"
-          value={config.ratio}
-          disabled={!config.enabled}
-          onChange={(e) => updateConfig({ ratio: parseFloat(e.target.value) })}
-        />
       </div>
       <div className="control-group">
         <label>
           Attack <span>{config.attack_ms.toFixed(1)} ms</span>
+          <input
+            type="range"
+            min="0.1"
+            max="100"
+            step="0.1"
+            value={config.attack_ms}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              updateConfig({ attack_ms: parseFloat(e.target.value) })
+            }
+          />
         </label>
-        <input
-          type="range"
-          min="0.1"
-          max="100"
-          step="0.1"
-          value={config.attack_ms}
-          disabled={!config.enabled}
-          onChange={(e) =>
-            updateConfig({ attack_ms: parseFloat(e.target.value) })
-          }
-        />
       </div>
       <div className="control-group">
         <label>
           Release <span>{config.release_ms.toFixed(0)} ms</span>
+          <input
+            type="range"
+            min="10"
+            max="1000"
+            step="1"
+            value={config.release_ms}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              updateConfig({ release_ms: parseFloat(e.target.value) })
+            }
+          />
         </label>
-        <input
-          type="range"
-          min="10"
-          max="1000"
-          step="1"
-          value={config.release_ms}
-          disabled={!config.enabled}
-          onChange={(e) =>
-            updateConfig({ release_ms: parseFloat(e.target.value) })
-          }
-        />
       </div>
     </BaseModule>
   );

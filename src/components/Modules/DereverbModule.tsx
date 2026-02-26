@@ -53,35 +53,35 @@ export const DereverbModule: React.FC<DereverbModuleProps> = ({
       <div className="control-group">
         <label>
           Reduction <span>{Math.round(config.reduction * 100)}%</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={config.reduction}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              onUpdate({ ...config, reduction: parseFloat(e.target.value) })
+            }
+          />
         </label>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={config.reduction}
-          disabled={!config.enabled}
-          onChange={(e) =>
-            onUpdate({ ...config, reduction: parseFloat(e.target.value) })
-          }
-        />
       </div>
 
       <div className="control-group">
         <label>
           Sensitivity <span>{Math.round(config.sensitivity * 100)}%</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={config.sensitivity}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              onUpdate({ ...config, sensitivity: parseFloat(e.target.value) })
+            }
+          />
         </label>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={config.sensitivity}
-          disabled={!config.enabled}
-          onChange={(e) =>
-            onUpdate({ ...config, sensitivity: parseFloat(e.target.value) })
-          }
-        />
       </div>
     </BaseModule>
   );

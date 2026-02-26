@@ -53,35 +53,35 @@ export const LimiterModule: React.FC<LimiterModuleProps> = ({
       <div className="control-group">
         <label>
           Threshold <span>{config.threshold_db.toFixed(1)} dB</span>
+          <input
+            type="range"
+            min="-60"
+            max="0"
+            step="0.1"
+            value={config.threshold_db}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              onUpdate({ ...config, threshold_db: parseFloat(e.target.value) })
+            }
+          />
         </label>
-        <input
-          type="range"
-          min="-60"
-          max="0"
-          step="0.1"
-          value={config.threshold_db}
-          disabled={!config.enabled}
-          onChange={(e) =>
-            onUpdate({ ...config, threshold_db: parseFloat(e.target.value) })
-          }
-        />
       </div>
 
       <div className="control-group">
         <label>
           Release <span>{config.release_ms} ms</span>
+          <input
+            type="range"
+            min="1"
+            max="1000"
+            step="1"
+            value={config.release_ms}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              onUpdate({ ...config, release_ms: parseInt(e.target.value) })
+            }
+          />
         </label>
-        <input
-          type="range"
-          min="1"
-          max="1000"
-          step="1"
-          value={config.release_ms}
-          disabled={!config.enabled}
-          onChange={(e) =>
-            onUpdate({ ...config, release_ms: parseInt(e.target.value) })
-          }
-        />
       </div>
     </BaseModule>
   );

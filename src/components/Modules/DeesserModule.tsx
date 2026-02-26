@@ -65,48 +65,50 @@ export function DeesserModule({
       <div className="control-group">
         <label>
           Threshold <span>{config.threshold_db.toFixed(1)} dB</span>
+          <input
+            type="range"
+            min="-60"
+            max="0"
+            step="0.1"
+            value={config.threshold_db}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              updateConfig({ threshold_db: parseFloat(e.target.value) })
+            }
+          />
         </label>
-        <input
-          type="range"
-          min="-60"
-          max="0"
-          step="0.1"
-          value={config.threshold_db}
-          disabled={!config.enabled}
-          onChange={(e) =>
-            updateConfig({ threshold_db: parseFloat(e.target.value) })
-          }
-        />
       </div>
       <div className="control-group">
         <label>
           Frequency <span>{Math.round(config.frequency)} Hz</span>
+          <input
+            type="range"
+            min="1000"
+            max="12000"
+            step="100"
+            value={config.frequency}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              updateConfig({ frequency: parseFloat(e.target.value) })
+            }
+          />
         </label>
-        <input
-          type="range"
-          min="1000"
-          max="12000"
-          step="100"
-          value={config.frequency}
-          disabled={!config.enabled}
-          onChange={(e) =>
-            updateConfig({ frequency: parseFloat(e.target.value) })
-          }
-        />
       </div>
       <div className="control-group">
         <label>
           Ratio <span>{config.ratio.toFixed(1)}:1</span>
+          <input
+            type="range"
+            min="1.0"
+            max="20.0"
+            step="0.1"
+            value={config.ratio}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              updateConfig({ ratio: parseFloat(e.target.value) })
+            }
+          />
         </label>
-        <input
-          type="range"
-          min="1.0"
-          max="20.0"
-          step="0.1"
-          value={config.ratio}
-          disabled={!config.enabled}
-          onChange={(e) => updateConfig({ ratio: parseFloat(e.target.value) })}
-        />
       </div>
     </BaseModule>
   );

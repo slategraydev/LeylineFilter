@@ -57,7 +57,7 @@ impl DereverbModule {
 
 impl AudioModule for DereverbModule {
     fn name(&self) -> &str {
-        "Dereverb"
+        "De-Reverb"
     }
 
     fn id(&self) -> &str {

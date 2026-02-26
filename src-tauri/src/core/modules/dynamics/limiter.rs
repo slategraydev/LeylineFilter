@@ -122,10 +122,10 @@ impl AudioModule for LimiterModule {
             return;
         }
 
-        let threshold_db = self.threshold_db.next();
-        let threshold_linear = Self::db_to_linear(threshold_db);
-
         for sample in samples.iter_mut() {
+            let threshold_db = self.threshold_db.next();
+            let threshold_linear = Self::db_to_linear(threshold_db);
+
             let input = *sample;
             let input_abs = input.abs();
 
@@ -174,8 +174,13 @@ mod tests {
 
         // 0dB input (1.0)
         let mut samples = vec![1.0; 480];
-        limiter.process(&mut samples);
 
+        // Process enough to let smoothing settle (10ms smoothing @ 48kHz = 480 samples time constant)
+        // 4800 samples = 10 time constants, definitely settled.
+        let mut settle = vec![0.0; 4800];
+        limiter.process(&mut settle);
+
+        limiter.process(&mut samples);
         // Threshold -6dB is approx 0.501
         for &s in samples.iter() {
             assert!(s.abs() <= 0.51, "Sample {} exceeded threshold", s);

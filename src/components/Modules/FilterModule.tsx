@@ -85,32 +85,32 @@ export function FilterModule({
       <div className="control-group">
         <label>
           Frequency <span>{Math.round(config.frequency)} Hz</span>
+          <input
+            type="range"
+            min="20"
+            max="20000"
+            step="1"
+            value={config.frequency}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              updateConfig({ frequency: parseFloat(e.target.value) })
+            }
+          />
         </label>
-        <input
-          type="range"
-          min="20"
-          max="20000"
-          step="1"
-          value={config.frequency}
-          disabled={!config.enabled}
-          onChange={(e) =>
-            updateConfig({ frequency: parseFloat(e.target.value) })
-          }
-        />
       </div>
       <div className="control-group">
         <label>
           Q <span>{config.q.toFixed(2)}</span>
+          <input
+            type="range"
+            min="0.1"
+            max="10.0"
+            step="0.01"
+            value={config.q}
+            disabled={!config.enabled}
+            onChange={(e) => updateConfig({ q: parseFloat(e.target.value) })}
+          />
         </label>
-        <input
-          type="range"
-          min="0.1"
-          max="10.0"
-          step="0.01"
-          value={config.q}
-          disabled={!config.enabled}
-          onChange={(e) => updateConfig({ q: parseFloat(e.target.value) })}
-        />
       </div>
     </BaseModule>
   );

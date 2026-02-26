@@ -91,52 +91,52 @@ export function ParametricEQModule({
             <div className="control-group">
               <label>
                 Freq <span>{Math.round(band.frequency)} Hz</span>
+                <input
+                  type="range"
+                  min="20"
+                  max="20000"
+                  step="1"
+                  value={band.frequency}
+                  disabled={!config.enabled || !band.enabled}
+                  onChange={(e) =>
+                    updateBand(i, { frequency: parseFloat(e.target.value) })
+                  }
+                />
               </label>
-              <input
-                type="range"
-                min="20"
-                max="20000"
-                step="1"
-                value={band.frequency}
-                disabled={!config.enabled || !band.enabled}
-                onChange={(e) =>
-                  updateBand(i, { frequency: parseFloat(e.target.value) })
-                }
-              />
             </div>
 
             <div className="control-group">
               <label>
                 Gain <span>{band.gain_db.toFixed(1)} dB</span>
+                <input
+                  type="range"
+                  min="-24"
+                  max="24"
+                  step="0.1"
+                  value={band.gain_db}
+                  disabled={!config.enabled || !band.enabled}
+                  onChange={(e) =>
+                    updateBand(i, { gain_db: parseFloat(e.target.value) })
+                  }
+                />
               </label>
-              <input
-                type="range"
-                min="-24"
-                max="24"
-                step="0.1"
-                value={band.gain_db}
-                disabled={!config.enabled || !band.enabled}
-                onChange={(e) =>
-                  updateBand(i, { gain_db: parseFloat(e.target.value) })
-                }
-              />
             </div>
 
             <div className="control-group">
               <label>
                 Q <span>{band.q.toFixed(2)}</span>
+                <input
+                  type="range"
+                  min="0.1"
+                  max="10.0"
+                  step="0.01"
+                  value={band.q}
+                  disabled={!config.enabled || !band.enabled}
+                  onChange={(e) =>
+                    updateBand(i, { q: parseFloat(e.target.value) })
+                  }
+                />
               </label>
-              <input
-                type="range"
-                min="0.1"
-                max="10.0"
-                step="0.01"
-                value={band.q}
-                disabled={!config.enabled || !band.enabled}
-                onChange={(e) =>
-                  updateBand(i, { q: parseFloat(e.target.value) })
-                }
-              />
             </div>
           </div>
         ))}

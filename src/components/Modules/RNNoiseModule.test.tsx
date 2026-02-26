@@ -1,8 +1,8 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import { RNNoiseModule } from './RNNoiseModule';
+import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { RNNoiseModule } from "./RNNoiseModule";
 
-describe('RNNoiseModule', () => {
+describe("RNNoiseModule", () => {
   const defaultConfig = {
     enabled: true,
   };
@@ -12,30 +12,55 @@ describe('RNNoiseModule', () => {
     initialPosition: { gx: 1, gy: 1 },
     heightUnits: 11,
     widthUnits: 18,
-    onPositionChange: () => { },
-    onHeightReport: () => { },
+    onPositionChange: () => {},
+    onHeightReport: () => {},
   };
 
-  it('renders correctly with default config', () => {
-    render(<RNNoiseModule {...defaultProps} config={defaultConfig} onChange={() => { }} />);
-    expect(screen.getByText(/Noise Suppression/i)).toBeInTheDocument();
+  it("renders correctly with default config", () => {
+    render(
+      <RNNoiseModule
+        {...defaultProps}
+        config={defaultConfig}
+        onChange={() => {}}
+      />,
+    );
+    // Check for title in heading
+    expect(
+      screen.getByRole("heading", { name: /Noise Suppression/i }),
+    ).toBeInTheDocument();
   });
 
-  it('toggles enabled state', () => {
+  it("toggles enabled state", () => {
     const onChange = vi.fn();
-    render(<RNNoiseModule {...defaultProps} config={defaultConfig} onChange={onChange} />);
+    render(
+      <RNNoiseModule
+        {...defaultProps}
+        config={defaultConfig}
+        onChange={onChange}
+      />,
+    );
 
     // BaseModule renders a checkbox for enabling/disabling
-    const checkbox = screen.getByRole('checkbox');
+    const checkbox = screen.getByRole("checkbox");
     fireEvent.click(checkbox);
 
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-      enabled: false
-    }));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enabled: false,
+      }),
+    );
   });
 
-  it('displays description text', () => {
-    render(<RNNoiseModule {...defaultProps} config={defaultConfig} onChange={() => { }} />);
-    expect(screen.getByText(/Recurrent Neural Networks/i)).toBeInTheDocument();
+  it("displays description text", () => {
+    render(
+      <RNNoiseModule
+        {...defaultProps}
+        config={defaultConfig}
+        onChange={() => {}}
+      />,
+    );
+    expect(
+      screen.getByText(/High-performance neural noise suppression/i),
+    ).toBeInTheDocument();
   });
 });
