@@ -268,12 +268,12 @@
     transition: 0.2s;
 }
 
-input:checked + .slider {
+input:checked+.slider {
     border-color: var(--color-accent);
     background-color: rgba(170, 65, 65, 0.1);
 }
 
-input:checked + .slider:before {
+input:checked+.slider:before {
     transform: translateX(1.3em);
     background-color: var(--color-accent);
 }
@@ -301,8 +301,9 @@ input:checked + .slider:before {
 
 .control-group label {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.15em;
     font-family: var(--font-mono);
     font-size: 0.85em;
     color: var(--color-text-dim);
@@ -313,9 +314,9 @@ input:checked + .slider:before {
 
 .control-group span {
     color: var(--color-accent);
-    font-size: inherit;
-    font-weight: inherit;
-    margin-left: 0.5em;
+    font-size: 0.85em;
+    font-weight: normal;
+    margin-left: 0;
 }
 
 .module-description {
@@ -337,20 +338,16 @@ input:checked + .slider:before {
     height: 1.5em;
     cursor: nwse-resize;
     z-index: 10;
-    background: linear-gradient(
-        135deg,
-        transparent 50%,
-        rgba(255, 255, 255, 0.1) 50%
-    );
+    background: linear-gradient(135deg,
+            transparent 50%,
+            rgba(255, 255, 255, 0.1) 50%);
     transition: background 0.2s;
 }
 
 .resize-handle:hover {
-    background: linear-gradient(
-        135deg,
-        transparent 50%,
-        var(--color-accent) 50%
-    );
+    background: linear-gradient(135deg,
+            transparent 50%,
+            var(--color-accent) 50%);
 }
 
 .module-card.resizing {

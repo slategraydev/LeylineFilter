@@ -97,7 +97,12 @@ impl SignalChain {
         self.modules.iter().map(|m| m.latency_samples()).sum()
     }
 
-    pub fn get_state(&self, is_running: bool, buffer_size: u32, monitoring_enabled: bool) -> EngineState {
+    pub fn get_state(
+        &self,
+        is_running: bool,
+        buffer_size: u32,
+        monitoring_enabled: bool,
+    ) -> EngineState {
         let modules = self
             .modules
             .iter()

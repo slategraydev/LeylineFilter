@@ -1,4 +1,4 @@
-use rubato::{Resampler, FastFixedIn, PolynomialDegree};
+use rubato::{FastFixedIn, PolynomialDegree, Resampler};
 
 /// A utility that handles resampling and buffering for modules that require
 /// a fixed sample rate and block size (like AI/RNN models).
@@ -45,13 +45,18 @@ impl AudioBlockProcessor {
         };
         s.setup_resamplers();
         // Initial silence to prime the pipeline latency (1 block)
-        s.output_accumulator.extend(std::iter::repeat(0.0).take(block_size));
+        s.output_accumulator
+            .extend(std::iter::repeat(0.0).take(block_size));
         s
     }
 
     fn setup_resamplers(&mut self) {
         if (self.source_rate - self.target_rate).abs() > 1.0 {
-            log::info!("AudioBlockProcessor: Setting up resamplers ({}Hz -> {}Hz)", self.source_rate, self.target_rate);
+            log::info!(
+                "AudioBlockProcessor: Setting up resamplers ({}Hz -> {}Hz)",
+                self.source_rate,
+                self.target_rate
+            );
             let chunk_size = 480;
 
             self.resampler_in = FastFixedIn::<f32>::new(
@@ -60,7 +65,8 @@ impl AudioBlockProcessor {
                 PolynomialDegree::Cubic,
                 chunk_size,
                 1,
-            ).ok();
+            )
+            .ok();
 
             self.resampler_out = FastFixedIn::<f32>::new(
                 self.source_rate as f64 / self.target_rate as f64,
@@ -68,9 +74,13 @@ impl AudioBlockProcessor {
                 PolynomialDegree::Cubic,
                 chunk_size,
                 1,
-            ).ok();
+            )
+            .ok();
         } else {
-            log::info!("AudioBlockProcessor: No resampling needed ({}Hz)", self.source_rate);
+            log::info!(
+                "AudioBlockProcessor: No resampling needed ({}Hz)",
+                self.source_rate
+            );
             self.resampler_in = None;
             self.resampler_out = None;
         }
@@ -84,7 +94,8 @@ impl AudioBlockProcessor {
             self.process_accumulator.clear();
             self.resample_out_accumulator.clear();
             self.output_accumulator.clear();
-            self.output_accumulator.extend(std::iter::repeat(0.0).take(self.block_size));
+            self.output_accumulator
+                .extend(std::iter::repeat(0.0).take(self.block_size));
         }
     }
 
@@ -100,7 +111,8 @@ impl AudioBlockProcessor {
                 if self.resample_in_buf[0].len() < needed {
                     self.resample_in_buf[0].resize(needed, 0.0);
                 }
-                self.resample_in_buf[0][..needed].copy_from_slice(&self.input_accumulator[..needed]);
+                self.resample_in_buf[0][..needed]
+                    .copy_from_slice(&self.input_accumulator[..needed]);
                 self.input_accumulator.drain(..needed);
 
                 let view = [&self.resample_in_buf[0][..needed]];
@@ -109,7 +121,8 @@ impl AudioBlockProcessor {
                 }
             }
         } else {
-            self.process_accumulator.extend_from_slice(&self.input_accumulator);
+            self.process_accumulator
+                .extend_from_slice(&self.input_accumulator);
             self.input_accumulator.clear();
         }
 
@@ -119,9 +132,11 @@ impl AudioBlockProcessor {
             self.process_accumulator.drain(..self.block_size);
 
             if self.resampler_out.is_some() {
-                self.resample_out_accumulator.extend_from_slice(&self.block_buffer);
+                self.resample_out_accumulator
+                    .extend_from_slice(&self.block_buffer);
             } else {
-                self.output_accumulator.extend_from_slice(&self.block_buffer);
+                self.output_accumulator
+                    .extend_from_slice(&self.block_buffer);
             }
         }
 
@@ -131,7 +146,8 @@ impl AudioBlockProcessor {
                 if self.resample_in_buf[0].len() < needed {
                     self.resample_in_buf[0].resize(needed, 0.0);
                 }
-                self.resample_in_buf[0][..needed].copy_from_slice(&self.resample_out_accumulator[..needed]);
+                self.resample_in_buf[0][..needed]
+                    .copy_from_slice(&self.resample_out_accumulator[..needed]);
                 self.resample_out_accumulator.drain(..needed);
 
                 let view = [&self.resample_in_buf[0][..needed]];
