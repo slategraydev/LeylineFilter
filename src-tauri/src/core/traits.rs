@@ -134,6 +134,7 @@ pub struct ModuleInfo {
 pub struct EngineState {
     pub modules: Vec<ModuleInfo>,
     pub is_running: bool,
+    pub monitoring_enabled: bool,
     pub sample_rate: f32,
     pub buffer_size: u32,
 }

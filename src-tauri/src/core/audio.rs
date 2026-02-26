@@ -33,6 +33,7 @@ pub enum InternalEngineCommand {
     Reorder(Vec<String>),
     #[allow(dead_code)]
     MidiEvent(crate::core::traits::MidiMessage),
+    SetMonitoring(bool),
 }
 
 pub struct StreamWrapper(#[allow(dead_code)] cpal::Stream);
@@ -162,6 +163,7 @@ pub struct AudioEngine {
     buffer_size: u32,
     last_latency: f32,
     last_cpu: f32,
+    monitoring_enabled: Arc<AtomicBool>,
     rb_occupancy: Arc<AtomicUsize>,
     module_latency_samples: Arc<AtomicUsize>,
     chain_state: Arc<Mutex<EngineState>>,
@@ -211,11 +213,13 @@ impl AudioEngine {
             buffer_size: initial_bs,
             last_latency: 0.0,
             last_cpu: 0.0,
+            monitoring_enabled: Arc::new(AtomicBool::new(true)),
             rb_occupancy: Arc::new(AtomicUsize::new(0)),
             module_latency_samples: Arc::new(AtomicUsize::new(0)),
             chain_state: Arc::new(Mutex::new(EngineState {
                 modules: Vec::new(),
                 is_running: false,
+                monitoring_enabled: true,
                 sample_rate: initial_sr,
                 buffer_size: initial_bs,
             })),
@@ -229,6 +233,21 @@ impl AudioEngine {
 
     pub fn is_running(&self) -> bool {
         self.input_stream.is_some()
+    }
+
+    pub fn set_monitoring(&mut self, enabled: bool) {
+        self.monitoring_enabled.store(enabled, Ordering::Relaxed);
+
+        if let Ok(mut state_lock) = self.chain_state.lock() {
+            state_lock.monitoring_enabled = enabled;
+            self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
+        }
+
+        if let Ok(tx_lock) = self.command_tx.lock() {
+            if let Some(tx) = tx_lock.as_ref() {
+                let _ = tx.send(InternalEngineCommand::SetMonitoring(enabled));
+            }
+        }
     }
 
     pub fn get_total_latency_ms(&mut self) -> f32 {
@@ -335,7 +354,8 @@ impl AudioEngine {
             // If running, the audio thread will sync state back.
             if !self.is_running() {
                 if let Ok(mut state_lock) = self.chain_state.lock() {
-                    *state_lock = offline.get_state(false, self.buffer_size);
+                    let is_mon = self.monitoring_enabled.load(Ordering::Relaxed);
+                    *state_lock = offline.get_state(false, self.buffer_size, is_mon);
                     self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
                 }
             }
@@ -398,6 +418,7 @@ impl AudioEngine {
             EngineState {
                 modules: Vec::new(),
                 is_running: false,
+                monitoring_enabled: self.monitoring_enabled.load(Ordering::Relaxed),
                 sample_rate: self.sample_rate,
                 buffer_size: self.buffer_size,
             }
@@ -422,6 +443,11 @@ impl AudioEngine {
         input_device_name: Option<String>,
         output_device_name: Option<String>,
     ) -> EngineResult<()> {
+        if self.is_running() {
+            log::info!("Restarting engine for device swap...");
+            self.stop();
+        }
+
         let host = cpal::default_host();
 
         log::info!("Using audio host: {:?}", host.id());
@@ -450,14 +476,48 @@ impl AudioEngine {
         }
         .ok_or_else(|| EngineError::DeviceError("Output device not found".to_string()))?;
 
-        let mut input_config: cpal::StreamConfig = input_device.default_input_config()?.into();
-        let mut output_config: cpal::StreamConfig = output_device.default_output_config()?.into();
+        log::info!("Selected Input Device: {}", input_device.name().unwrap_or_default());
+        log::info!("Selected Output Device: {}", output_device.name().unwrap_or_default());
+
+        let mut input_config_supported = input_device.default_input_config()?;
+        let mut output_config_supported = output_device.default_output_config()?;
+
+        // Search for F32 support if default is different
+        if input_config_supported.sample_format() != cpal::SampleFormat::F32 {
+            if let Ok(configs) = input_device.supported_input_configs() {
+                if let Some(f32_config) = configs.filter(|c| c.sample_format() == cpal::SampleFormat::F32).next() {
+                    log::info!("Found alternative F32 input config");
+                    input_config_supported = f32_config.with_max_sample_rate();
+                }
+            }
+        }
+
+        if output_config_supported.sample_format() != cpal::SampleFormat::F32 {
+            if let Ok(configs) = output_device.supported_output_configs() {
+                if let Some(f32_config) = configs.filter(|c| c.sample_format() == cpal::SampleFormat::F32).next() {
+                    log::info!("Found alternative F32 output config");
+                    output_config_supported = f32_config.with_max_sample_rate();
+                }
+            }
+        }
+
+        if input_config_supported.sample_format() != cpal::SampleFormat::F32 {
+            return Err(EngineError::DeviceError(format!("Input device {} does not support F32 samples", input_device.name().unwrap_or_default())));
+        }
+        if output_config_supported.sample_format() != cpal::SampleFormat::F32 {
+            return Err(EngineError::DeviceError(format!("Output device {} does not support F32 samples", output_device.name().unwrap_or_default())));
+        }
+
+        log::info!("Final Input Format: {:?}", input_config_supported.sample_format());
+        log::info!("Final Output Format: {:?}", output_config_supported.sample_format());
+
+        let mut input_config: cpal::StreamConfig = input_config_supported.into();
+        let mut output_config: cpal::StreamConfig = output_config_supported.into();
 
         // Use Default for maximum compatibility on WASAPI
         input_config.buffer_size = cpal::BufferSize::Default;
         output_config.buffer_size = cpal::BufferSize::Default;
 
-        log::info!("Opening streams with Default buffer size...");
         log::info!("Input Config: {:?}", input_config);
         log::info!("Output Config: {:?}", output_config);
 
@@ -474,7 +534,8 @@ impl AudioEngine {
 
         // Populate from offline chain
         if let Ok(offline) = self.offline_chain.lock() {
-            for m_info in offline.get_state(false, 0).modules {
+            let is_mon = self.monitoring_enabled.load(Ordering::Relaxed);
+            for m_info in offline.get_state(false, 0, is_mon).modules {
                 // Use the module's name and original ID to re-create it
                 if let Some(mut m) =
                     ModuleFactory::create_with_id(&m_info.name, m_info.id, internal_sample_rate)
@@ -524,8 +585,12 @@ impl AudioEngine {
         let initial_lat = chain.latency_samples();
         mod_lat_atomic.store(initial_lat, Ordering::Relaxed);
 
+        let monitoring_enabled_flag = self.monitoring_enabled.clone();
+
         if let Ok(mut state_lock) = self.chain_state.lock() {
-            *state_lock = chain.get_state(true, 0); // Start with 0, will be updated by callback
+            let is_mon = monitoring_enabled_flag.load(Ordering::Relaxed);
+            *state_lock = chain.get_state(true, 0, is_mon); // Start with 0, will be updated by callback
+            state_lock.monitoring_enabled = is_mon;
             self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
         }
 
@@ -641,6 +706,10 @@ impl AudioEngine {
                             chain_changed = true;
                         }
                         InternalEngineCommand::MidiEvent(_midi) => {}
+                        InternalEngineCommand::SetMonitoring(enabled) => {
+                            monitoring_enabled_flag.store(enabled, Ordering::Relaxed);
+                            chain_changed = true;
+                        }
                     }
                 }
 
@@ -650,7 +719,9 @@ impl AudioEngine {
                     // Try-lock for UI sync (best effort)
                     if let Ok(mut state_lock) = chain_state_clone.try_lock() {
                         let current_buf = metrics.buffer_size.load(Ordering::Relaxed);
-                        *state_lock = chain.get_state(true, current_buf);
+                        let is_mon = monitoring_enabled_flag.load(Ordering::Relaxed);
+                        *state_lock = chain.get_state(true, current_buf, is_mon);
+                        state_lock.monitoring_enabled = is_mon;
                         metrics.state_version.fetch_add(1, Ordering::Relaxed);
                     }
                 }
@@ -709,8 +780,10 @@ impl AudioEngine {
                         output_accumulator.extend_from_slice(&working_chunk);
                     }
 
-                    // Push to output ringbuffer
-                    producer.push_slice(&output_accumulator);
+                    // Push to output ringbuffer only if monitoring is enabled
+                    if monitoring_enabled_flag.load(Ordering::Relaxed) {
+                        producer.push_slice(&output_accumulator);
+                    }
                     output_accumulator.clear();
 
                     rb_occ_in.store(producer.occupied_len(), Ordering::Relaxed);

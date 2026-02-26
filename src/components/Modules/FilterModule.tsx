@@ -8,7 +8,12 @@ interface FilterModuleProps {
   heightUnits: number;
   widthUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
-  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
+  onDrag?: (
+    id: string,
+    pos: GridPosition | null,
+    rawOffset?: { x: number; y: number },
+    continuousPos?: GridPosition,
+  ) => void;
   onHeightReport?: (id: string, units: number) => void;
   onWidthReport?: (id: string, units: number) => void;
   config: FilterConfig;
@@ -54,6 +59,9 @@ export function FilterModule({
       style={style}
       isNewlyPlaced={isNewlyPlaced}
     >
+      <p className="module-description">
+        Applies frequency-based attenuation to clear up the signal.
+      </p>
       <div className="control-group">
         <label>
           Type
@@ -76,33 +84,33 @@ export function FilterModule({
       </div>
       <div className="control-group">
         <label>
-          Frequency: {Math.round(config.frequency)} Hz
-          <input
-            type="range"
-            min="20"
-            max="20000"
-            step="1"
-            value={config.frequency}
-            disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ frequency: parseFloat(e.target.value) })
-            }
-          />
+          Frequency <span>{Math.round(config.frequency)} Hz</span>
         </label>
+        <input
+          type="range"
+          min="20"
+          max="20000"
+          step="1"
+          value={config.frequency}
+          disabled={!config.enabled}
+          onChange={(e) =>
+            updateConfig({ frequency: parseFloat(e.target.value) })
+          }
+        />
       </div>
       <div className="control-group">
         <label>
-          Q: {config.q.toFixed(2)}
-          <input
-            type="range"
-            min="0.1"
-            max="10.0"
-            step="0.01"
-            value={config.q}
-            disabled={!config.enabled}
-            onChange={(e) => updateConfig({ q: parseFloat(e.target.value) })}
-          />
+          Q <span>{config.q.toFixed(2)}</span>
         </label>
+        <input
+          type="range"
+          min="0.1"
+          max="10.0"
+          step="0.01"
+          value={config.q}
+          disabled={!config.enabled}
+          onChange={(e) => updateConfig({ q: parseFloat(e.target.value) })}
+        />
       </div>
     </BaseModule>
   );

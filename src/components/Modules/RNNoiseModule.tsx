@@ -8,7 +8,12 @@ interface RNNoiseModuleProps {
   heightUnits: number;
   widthUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
-  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
+  onDrag?: (
+    id: string,
+    pos: GridPosition | null,
+    rawOffset?: { x: number; y: number },
+    continuousPos?: GridPosition,
+  ) => void;
   onHeightReport?: (id: string, units: number) => void;
   onWidthReport?: (id: string, units: number) => void;
   title?: string;
@@ -56,11 +61,9 @@ export function RNNoiseModule({
       style={style}
       isNewlyPlaced={isNewlyPlaced}
     >
-      <div className="control-group">
-        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
-          Uses Recurrent Neural Networks to suppress non-stationary noise in real-time.
-        </p>
-      </div>
+      <p className="module-description">
+        High-performance neural noise suppression for vocal clarity.
+      </p>
     </BaseModule>
   );
 }

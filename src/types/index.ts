@@ -45,7 +45,6 @@ export interface ParametricEQConfig {
   bands: EQBandConfig[];
 }
 
-
 export interface FXConfig {
   enabled: boolean;
   fx_type: "Reverb" | "Delay" | "Chorus" | "Flanger";
@@ -104,6 +103,7 @@ export interface ModuleInfo {
 export interface EngineState {
   modules: ModuleInfo[];
   is_running: boolean;
+  monitoring_enabled: boolean;
   sample_rate: number;
   buffer_size: number;
 }

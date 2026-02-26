@@ -11,6 +11,7 @@ import { EngineMetrics, EngineState } from "../types";
  */
 export function useEngine() {
   const [isRunning, setIsRunning] = useState(false);
+  const [isMonitoring, setIsMonitoring] = useState(true);
   const [inputDevices, setInputDevices] = useState<string[]>([]);
   const [outputDevices, setOutputDevices] = useState<string[]>([]);
   const [engineState, setEngineState] = useState<EngineState | null>(null);
@@ -55,7 +56,9 @@ export function useEngine() {
      */
     const interval = setInterval(async () => {
       try {
-        const m = await invoke<EngineMetrics & { state_version: number }>("get_metrics");
+        const m = await invoke<EngineMetrics & { state_version: number }>(
+          "get_metrics",
+        );
 
         // Comprehensive safety check for every property
         const safeMetrics: EngineMetrics = {
@@ -82,6 +85,7 @@ export function useEngine() {
           if (state) {
             setEngineState(state);
             setIsRunning(state.is_running ?? false);
+            setIsMonitoring(state.monitoring_enabled ?? true);
             setLastVersion(safeMetrics.state_version);
           }
         }
@@ -92,9 +96,20 @@ export function useEngine() {
     return () => clearInterval(interval);
   }, [lastVersion]); // Dependency on lastVersion to ensure state updates correctly in closure
 
+  const setMonitoring = async (enabled: boolean) => {
+    try {
+      await invoke("set_monitoring", { enabled });
+      setIsMonitoring(enabled);
+    } catch (e) {
+      console.error("Failed to toggle monitoring:", e);
+    }
+  };
+
   const startEngine = async (inputDevice: string, outputDevice: string) => {
     try {
-      console.log(`Starting engine with Input: ${inputDevice}, Output: ${outputDevice}`);
+      console.log(
+        `Starting engine with Input: ${inputDevice}, Output: ${outputDevice}`,
+      );
       await invoke("start_engine", {
         input_device: inputDevice === "Default" ? null : inputDevice,
         output_device: outputDevice === "Default" ? null : outputDevice,
@@ -121,8 +136,8 @@ export function useEngine() {
       await invoke("send_command", {
         command: {
           type: "AddModule",
-          data: { module_type: moduleType }
-        }
+          data: { module_type: moduleType },
+        },
       });
     } catch (e) {
       console.error("Failed to add module:", e);
@@ -134,8 +149,8 @@ export function useEngine() {
       await invoke("send_command", {
         command: {
           type: "RemoveModule",
-          data: { id }
-        }
+          data: { id },
+        },
       });
     } catch (e) {
       console.error("Failed to remove module:", e);
@@ -144,12 +159,14 @@ export function useEngine() {
 
   return {
     isRunning,
+    isMonitoring,
     inputDevices,
     outputDevices,
     engineState,
     metrics,
     startEngine,
     stopEngine,
+    setMonitoring,
     addModule,
     removeModule,
   };

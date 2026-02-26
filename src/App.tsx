@@ -37,7 +37,7 @@ import {
   SIDEBAR_WIDTH_PX,
   MODULE_W_UNITS,
   MODULE_H_UNITS,
-  MODULE_HEIGHTS
+  MODULE_HEIGHTS,
 } from "./constants";
 import "./App.css";
 
@@ -47,12 +47,14 @@ import "./App.css";
 function App() {
   const {
     isRunning,
+    isMonitoring,
     inputDevices,
     outputDevices,
     engineState,
     metrics,
     startEngine,
     stopEngine,
+    setMonitoring,
     addModule,
     removeModule,
   } = useEngine();
@@ -66,73 +68,96 @@ function App() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingPos, setDraggingPos] = useState<GridPosition | null>(null);
 
-  const [positions, setPositions] = useState<Record<string, GridPosition>>(() => {
-    const saved = localStorage.getItem("module_positions_grid");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Failed to parse module positions", e);
+  const [positions, setPositions] = useState<Record<string, GridPosition>>(
+    () => {
+      const saved = localStorage.getItem("module_positions_grid");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error("Failed to parse module positions", e);
+        }
       }
-    }
-    return {};
-  });
+      return {};
+    },
+  );
 
-  const [moduleHeights, setModuleHeights] = useState<Record<string, number>>(() => {
-    const saved = localStorage.getItem("module_heights_grid");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Failed to parse module heights", e);
+  const [moduleHeights, setModuleHeights] = useState<Record<string, number>>(
+    () => {
+      const saved = localStorage.getItem("module_heights_grid");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error("Failed to parse module heights", e);
+        }
       }
-    }
-    return {};
-  });
+      return {};
+    },
+  );
 
-  const [moduleWidths, setModuleWidths] = useState<Record<string, number>>(() => {
-    const saved = localStorage.getItem("module_widths_grid");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Failed to parse module widths", e);
+  const [moduleWidths, setModuleWidths] = useState<Record<string, number>>(
+    () => {
+      const saved = localStorage.getItem("module_widths_grid");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error("Failed to parse module widths", e);
+        }
       }
-    }
-    return {};
-  });
+      return {};
+    },
+  );
 
   // Helper to find the next empty slot in the grid (used only for NEW modules)
-  const findNextAvailableSlot = (currentPositions: Record<string, GridPosition>, type: string): GridPosition => {
+  const findNextAvailableSlot = (
+    currentPositions: Record<string, GridPosition>,
+    type: string,
+  ): GridPosition => {
     const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
-    const maxGx = Math.max(MODULE_W_UNITS, Math.floor(availableWidthPx / GRID_UNIT_PX));
+    const maxGx = Math.max(
+      MODULE_W_UNITS,
+      Math.floor(availableWidthPx / GRID_UNIT_PX),
+    );
 
     const typeMap: Record<string, string> = {};
-    engineState?.modules?.forEach(m => { typeMap[m.id] = m.config.type; });
-    const getH = (mid: string) => moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || "default"] || MODULE_H_UNITS;
+    engineState?.modules?.forEach((m) => {
+      typeMap[m.id] = m.config.type;
+    });
+    const getH = (mid: string) =>
+      moduleHeights[mid] ||
+      MODULE_HEIGHTS[typeMap[mid] || "default"] ||
+      MODULE_H_UNITS;
     const getW = (mid: string) => moduleWidths[mid] || MODULE_W_UNITS;
 
-    return findFreeSlot(MODULE_HEIGHTS[type] || MODULE_H_UNITS, currentPositions, getH, getW, maxGx);
+    return findFreeSlot(
+      MODULE_HEIGHTS[type] || MODULE_H_UNITS,
+      currentPositions,
+      getH,
+      getW,
+      maxGx,
+    );
   };
 
   // Sync positions when new modules appear
   useEffect(() => {
     if (!engineState) return;
 
-    setPositions(prev => {
+    setPositions((prev) => {
       let changed = false;
       let addedIds: string[] = [];
       const next = { ...prev };
 
-      const currentIds = new Set((engineState.modules || []).map(m => m.id));
-      Object.keys(next).forEach(id => {
+      const currentIds = new Set((engineState.modules || []).map((m) => m.id));
+      Object.keys(next).forEach((id) => {
         if (!currentIds.has(id)) {
           delete next[id];
           changed = true;
         }
       });
 
-      engineState.modules?.forEach(m => {
+      engineState.modules?.forEach((m) => {
         if (!next[m.id]) {
           const nextSlot = findNextAvailableSlot(next, m.config.type);
           next[m.id] = nextSlot;
@@ -144,7 +169,7 @@ function App() {
       if (changed) {
         localStorage.setItem("module_positions_grid", JSON.stringify(next));
         if (addedIds.length > 0) {
-          setNewlyAddedModuleIds(prevIds => [...prevIds, ...addedIds]);
+          setNewlyAddedModuleIds((prevIds) => [...prevIds, ...addedIds]);
         }
         return next;
       }
@@ -156,16 +181,16 @@ function App() {
   useEffect(() => {
     if (newlyAddedModuleIds.length > 0) {
       if (expectingNewModule) {
-        setNewlyPlacedIds(prev => {
+        setNewlyPlacedIds((prev) => {
           const nextSet = new Set(prev);
-          newlyAddedModuleIds.forEach(id => nextSet.add(id));
+          newlyAddedModuleIds.forEach((id) => nextSet.add(id));
           return nextSet;
         });
 
         // Set individual timeouts for each added module
-        newlyAddedModuleIds.forEach(id => {
+        newlyAddedModuleIds.forEach((id) => {
           setTimeout(() => {
-            setNewlyPlacedIds(prev => {
+            setNewlyPlacedIds((prev) => {
               const nextSet = new Set(prev);
               nextSet.delete(id);
               return nextSet;
@@ -178,7 +203,12 @@ function App() {
     }
   }, [newlyAddedModuleIds, expectingNewModule]);
 
-  const handleDrag = (_id: string, pos: GridPosition | null, _rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => {
+  const handleDrag = (
+    _id: string,
+    pos: GridPosition | null,
+    _rawOffset?: { x: number; y: number },
+    continuousPos?: GridPosition,
+  ) => {
     if (!pos) {
       setDraggingId(null);
       setDraggingPos(null);
@@ -193,7 +223,7 @@ function App() {
     setDraggingId(null);
     setDraggingPos(null);
 
-    setPositions(prev => {
+    setPositions((prev) => {
       const next = { ...prev, [id]: pos };
       localStorage.setItem("module_positions_grid", JSON.stringify(next));
       return next;
@@ -211,17 +241,17 @@ function App() {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       // Close if click is outside the menu and not on the toggle button
-      if (!target.closest('.add-module-menu') && !target.closest('.add-btn')) {
+      if (!target.closest(".add-module-menu") && !target.closest(".add-btn")) {
         setShowAddMenu(false);
       }
     };
 
-    window.addEventListener('contextmenu', handleContext);
-    window.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener("contextmenu", handleContext);
+    window.addEventListener("mousedown", handleClickOutside);
 
     return () => {
-      window.removeEventListener('contextmenu', handleContext);
-      window.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener("contextmenu", handleContext);
+      window.removeEventListener("mousedown", handleClickOutside);
     };
   }, [showAddMenu]);
 
@@ -232,6 +262,20 @@ function App() {
 
   const removeModuleFromGrid = async (id: string) => {
     removeModule(id);
+  };
+
+  const handleInputChange = (device: string) => {
+    setSelectedInput(device);
+    if (isRunning) {
+      startEngine(device, selectedOutput);
+    }
+  };
+
+  const handleOutputChange = (device: string) => {
+    setSelectedOutput(device);
+    if (isRunning) {
+      startEngine(selectedInput, device);
+    }
   };
 
   const toggleEngine = () => {
@@ -247,7 +291,7 @@ function App() {
   };
 
   const handleHeightReport = (id: string, units: number) => {
-    setModuleHeights(prev => {
+    setModuleHeights((prev) => {
       if (prev[id] === units) return prev;
       const nextHeights = { ...prev, [id]: units };
       localStorage.setItem("module_heights_grid", JSON.stringify(nextHeights));
@@ -259,12 +303,15 @@ function App() {
     let maxGx = 0;
     let maxGy = 0;
     const typeMap: Record<string, string> = {};
-    engineState?.modules?.forEach(m => { typeMap[m.id] = m.config.type; });
+    engineState?.modules?.forEach((m) => {
+      typeMap[m.id] = m.config.type;
+    });
 
     Object.entries(positions).forEach(([id, pos]) => {
-      const effectivePos = (id === draggingId && draggingPos) ? draggingPos : pos;
+      const effectivePos = id === draggingId && draggingPos ? draggingPos : pos;
       const mType = typeMap[id] || "default";
-      const mHeight = moduleHeights[id] || MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
+      const mHeight =
+        moduleHeights[id] || MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
       const mWidth = moduleWidths[id] || MODULE_W_UNITS;
       maxGx = Math.max(maxGx, effectivePos.gx + mWidth);
       maxGy = Math.max(maxGy, effectivePos.gy + mHeight);
@@ -273,13 +320,13 @@ function App() {
     const effectiveGridUnit = GRID_UNIT_PX || 18;
 
     return {
-      minWidth: '100%',
-      minHeight: '100vh',
-      width: maxGx > 0 ? `calc(var(--grid-unit) * ${maxGx + 5})` : '100%',
-      height: maxGy > 0 ? `calc(var(--grid-unit) * ${maxGy + 10})` : '100%',
-      position: 'relative' as const,
-      '--grid-unit': `${effectiveGridUnit}px`,
-      transition: 'width 0.2s ease, height 0.2s ease',
+      minWidth: "100%",
+      minHeight: "100vh",
+      width: maxGx > 0 ? `calc(var(--grid-unit) * ${maxGx + 5})` : "100%",
+      height: maxGy > 0 ? `calc(var(--grid-unit) * ${maxGy + 10})` : "100%",
+      position: "relative" as const,
+      "--grid-unit": `${effectiveGridUnit}px`,
+      transition: "width 0.2s ease, height 0.2s ease",
     } as React.CSSProperties;
   };
 
@@ -290,7 +337,8 @@ function App() {
     const config = module.config;
     if (!config || !config.data) return null;
 
-    const mHeight = moduleHeights[module.id] || MODULE_HEIGHTS[config.type] || MODULE_H_UNITS;
+    const mHeight =
+      moduleHeights[module.id] || MODULE_HEIGHTS[config.type] || MODULE_H_UNITS;
     const mWidth = moduleWidths[module.id] || MODULE_W_UNITS;
 
     const commonProps = {
@@ -302,7 +350,7 @@ function App() {
       onDrag: handleDrag,
       onHeightReport: handleHeightReport,
       onWidthReport: (id: string, units: number) => {
-        setModuleWidths(prev => {
+        setModuleWidths((prev) => {
           if (prev[id] === units) return prev;
           const next = { ...prev, [id]: units };
           localStorage.setItem("module_widths_grid", JSON.stringify(next));
@@ -322,7 +370,9 @@ function App() {
             key={module.id}
             {...commonProps}
             config={config.data as GainConfig}
-            onChange={(data) => handleUpdateConfig(module.id, { type: "Gain", data })}
+            onChange={(data) =>
+              handleUpdateConfig(module.id, { type: "Gain", data })
+            }
           />
         );
         break;
@@ -332,7 +382,9 @@ function App() {
             key={module.id}
             {...commonProps}
             config={config.data as ExpanderConfig}
-            onChange={(data) => handleUpdateConfig(module.id, { type: "Expander", data })}
+            onChange={(data) =>
+              handleUpdateConfig(module.id, { type: "Expander", data })
+            }
           />
         );
         break;
@@ -342,7 +394,9 @@ function App() {
             key={module.id}
             {...commonProps}
             config={config.data as RNNoiseConfig}
-            onChange={(data) => handleUpdateConfig(module.id, { type: "RNNoise", data })}
+            onChange={(data) =>
+              handleUpdateConfig(module.id, { type: "RNNoise", data })
+            }
           />
         );
         break;
@@ -351,7 +405,9 @@ function App() {
           <CompressorModule
             {...commonProps}
             config={module.config.data as CompressorConfig}
-            onChange={(data) => handleUpdateConfig(module.id, { type: "Compressor", data })}
+            onChange={(data) =>
+              handleUpdateConfig(module.id, { type: "Compressor", data })
+            }
           />
         );
         break;
@@ -360,7 +416,9 @@ function App() {
           <ParametricEQModule
             {...commonProps}
             config={module.config.data as ParametricEQConfig}
-            onChange={(data) => handleUpdateConfig(module.id, { type: "ParametricEQ", data })}
+            onChange={(data) =>
+              handleUpdateConfig(module.id, { type: "ParametricEQ", data })
+            }
           />
         );
         break;
@@ -370,7 +428,9 @@ function App() {
             key={module.id}
             {...commonProps}
             config={config.data as DeesserConfig}
-            onChange={(data) => handleUpdateConfig(module.id, { type: "Deesser", data })}
+            onChange={(data) =>
+              handleUpdateConfig(module.id, { type: "Deesser", data })
+            }
           />
         );
         break;
@@ -380,7 +440,9 @@ function App() {
             key={module.id}
             {...commonProps}
             config={config.data as SaturationConfig}
-            onChange={(data) => handleUpdateConfig(module.id, { type: "Saturation", data })}
+            onChange={(data) =>
+              handleUpdateConfig(module.id, { type: "Saturation", data })
+            }
           />
         );
         break;
@@ -390,9 +452,16 @@ function App() {
             key={module.id}
             {...commonProps}
             config={config.data as LimiterConfig}
-            onUpdate={(data) => handleUpdateConfig(module.id, { type: "Limiter", data })}
+            onUpdate={(data) =>
+              handleUpdateConfig(module.id, { type: "Limiter", data })
+            }
             onRemove={() => removeModule(module.id)}
-            onToggle={(enabled) => handleUpdateConfig(module.id, { type: "Limiter", data: { ...config.data as LimiterConfig, enabled } })}
+            onToggle={(enabled) =>
+              handleUpdateConfig(module.id, {
+                type: "Limiter",
+                data: { ...(config.data as LimiterConfig), enabled },
+              })
+            }
           />
         );
         break;
@@ -402,9 +471,16 @@ function App() {
             key={module.id}
             {...commonProps}
             config={config.data as DereverbConfig}
-            onUpdate={(data) => handleUpdateConfig(module.id, { type: "Dereverb", data })}
+            onUpdate={(data) =>
+              handleUpdateConfig(module.id, { type: "Dereverb", data })
+            }
             onRemove={() => removeModule(module.id)}
-            onToggle={(enabled) => handleUpdateConfig(module.id, { type: "Dereverb", data: { ...config.data as DereverbConfig, enabled } })}
+            onToggle={(enabled) =>
+              handleUpdateConfig(module.id, {
+                type: "Dereverb",
+                data: { ...(config.data as DereverbConfig), enabled },
+              })
+            }
           />
         );
         break;
@@ -414,7 +490,9 @@ function App() {
             key={module.id}
             {...commonProps}
             config={config.data as FilterConfig}
-            onChange={(data) => handleUpdateConfig(module.id, { type: "Filter", data })}
+            onChange={(data) =>
+              handleUpdateConfig(module.id, { type: "Filter", data })
+            }
           />
         );
         break;
@@ -440,12 +518,14 @@ function App() {
           <div className="sidebar-section">
             <EngineControls
               isRunning={isRunning}
+              isMonitoring={isMonitoring}
               inputDevices={inputDevices}
               outputDevices={outputDevices}
               selectedInput={selectedInput}
               selectedOutput={selectedOutput}
-              onInputChange={setSelectedInput}
-              onOutputChange={setSelectedOutput}
+              onInputChange={handleInputChange}
+              onOutputChange={handleOutputChange}
+              onToggleMonitoring={setMonitoring}
             />
           </div>
 
@@ -463,19 +543,24 @@ function App() {
               </div>
               <div className="metric">
                 <label>Sample Rate</label>
-                <span>{isRunning && engineState ? `${(engineState.sample_rate / 1000).toFixed(1)} kHz` : "---"}</span>
+                <span>
+                  {isRunning && engineState
+                    ? `${(engineState.sample_rate / 1000).toFixed(1)} kHz`
+                    : "---"}
+                </span>
               </div>
               <div className="metric">
                 <label>Buffer</label>
-                <span>{isRunning ? `${metrics.buffer_size || (engineState?.buffer_size ?? "---")} smp` : "---"}</span>
+                <span>
+                  {isRunning
+                    ? `${metrics.buffer_size || (engineState?.buffer_size ?? "---")} smp`
+                    : "---"}
+                </span>
               </div>
             </div>
           </div>
           <div className="sidebar-section visualizer-top">
-            <Oscilloscope
-              waveform={metrics.waveform}
-              isRunning={isRunning}
-            />
+            <Oscilloscope waveform={metrics.waveform} isRunning={isRunning} />
             <Visualizer
               isRunning={isRunning}
               spectrum={metrics.spectrum}
@@ -496,7 +581,7 @@ function App() {
 
       <main className="module-grid">
         <div className="grid-inner" style={getGridContentStyle()}>
-          {engineState?.modules?.map(m => {
+          {engineState?.modules?.map((m) => {
             try {
               return renderModule(m);
             } catch (e) {
@@ -511,7 +596,7 @@ function App() {
         <AddModuleMenu
           onAdd={addModuleFromMenu}
           onClose={() => setShowAddMenu(false)}
-          existingTypes={(engineState?.modules || []).map(m => m.config.type)}
+          existingTypes={(engineState?.modules || []).map((m) => m.config.type)}
         />
       )}
 

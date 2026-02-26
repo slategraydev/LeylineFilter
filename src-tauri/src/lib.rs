@@ -95,6 +95,13 @@ async fn stop_engine(state: State<'_, AppState>) -> std::result::Result<(), Stri
     Ok(())
 }
 
+#[tauri::command]
+async fn set_monitoring(state: State<'_, AppState>, enabled: bool) -> std::result::Result<(), String> {
+    let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
+    engine.set_monitoring(enabled);
+    Ok(())
+}
+
 /// Metrics exported to the frontend.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Metrics {
@@ -198,6 +205,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             start_engine,
             stop_engine,
+            set_monitoring,
             get_metrics,
             update_config,
             get_input_devices,

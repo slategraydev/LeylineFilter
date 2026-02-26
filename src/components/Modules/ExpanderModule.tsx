@@ -8,7 +8,12 @@ interface ExpanderModuleProps {
   heightUnits: number;
   widthUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
-  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
+  onDrag?: (
+    id: string,
+    pos: GridPosition | null,
+    rawOffset?: { x: number; y: number },
+    continuousPos?: GridPosition,
+  ) => void;
   onHeightReport?: (id: string, units: number) => void;
   onWidthReport?: (id: string, units: number) => void;
   config: ExpanderConfig;
@@ -54,69 +59,71 @@ export function ExpanderModule({
       style={style}
       isNewlyPlaced={isNewlyPlaced}
     >
+      <p className="module-description">
+        Reduces low-level noise by attenuating signals below the threshold.
+      </p>
       <div className="control-group">
         <label>
-          Threshold: {Math.round(config.threshold * 1000)}
-          <input
-            type="range"
-            min="0.001"
-            max="0.5"
-            step="0.001"
-            value={config.threshold}
-            disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ threshold: parseFloat(e.target.value) })
-            }
-          />
+          Threshold{" "}
+          <span>{(20 * Math.log10(config.threshold)).toFixed(1)} dB</span>
         </label>
+        <input
+          type="range"
+          min="0.0001"
+          max="0.5"
+          step="0.0001"
+          value={config.threshold}
+          disabled={!config.enabled}
+          onChange={(e) =>
+            updateConfig({ threshold: parseFloat(e.target.value) })
+          }
+        />
       </div>
       <div className="control-group">
         <label>
-          Ratio: {config.ratio.toFixed(1)}:1
-          <input
-            type="range"
-            min="1.0"
-            max="10.0"
-            step="0.1"
-            value={config.ratio}
-            disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ ratio: parseFloat(e.target.value) })
-            }
-          />
+          Ratio <span>{config.ratio.toFixed(1)}:1</span>
         </label>
+        <input
+          type="range"
+          min="1.0"
+          max="10.0"
+          step="0.1"
+          value={config.ratio}
+          disabled={!config.enabled}
+          onChange={(e) => updateConfig({ ratio: parseFloat(e.target.value) })}
+        />
       </div>
       <div className="control-group">
         <label>
-          Attack: {config.attack_ms.toFixed(0)} ms
-          <input
-            type="range"
-            min="0.1"
-            max="200"
-            step="0.1"
-            value={config.attack_ms}
-            disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ attack_ms: parseFloat(e.target.value) })
-            }
-          />
+          Attack <span>{config.attack_ms.toFixed(1)} ms</span>
         </label>
+        <input
+          type="range"
+          min="0.1"
+          max="100"
+          step="0.1"
+          value={config.attack_ms}
+          disabled={!config.enabled}
+          onChange={(e) =>
+            updateConfig({ attack_ms: parseFloat(e.target.value) })
+          }
+        />
       </div>
       <div className="control-group">
         <label>
-          Release: {config.release_ms.toFixed(0)} ms
-          <input
-            type="range"
-            min="10"
-            max="1000"
-            step="1"
-            value={config.release_ms}
-            disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ release_ms: parseFloat(e.target.value) })
-            }
-          />
+          Release <span>{config.release_ms.toFixed(0)} ms</span>
         </label>
+        <input
+          type="range"
+          min="10"
+          max="1000"
+          step="1"
+          value={config.release_ms}
+          disabled={!config.enabled}
+          onChange={(e) =>
+            updateConfig({ release_ms: parseFloat(e.target.value) })
+          }
+        />
       </div>
     </BaseModule>
   );
