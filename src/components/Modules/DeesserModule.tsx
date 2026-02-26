@@ -1,8 +1,8 @@
-import { ExpanderConfig } from "../../types";
+import { DeesserConfig } from "../../types";
 import { BaseModule } from "./BaseModule";
 import { GridPosition } from "../../hooks/useDraggable";
 
-interface ExpanderModuleProps {
+interface DeesserModuleProps {
   id: string;
   initialPosition: GridPosition;
   heightUnits: number;
@@ -16,14 +16,14 @@ interface ExpanderModuleProps {
   ) => void;
   onHeightReport?: (id: string, units: number) => void;
   onWidthReport?: (id: string, units: number) => void;
-  config: ExpanderConfig;
-  onChange: (config: ExpanderConfig) => void;
+  config: DeesserConfig;
+  onChange: (config: DeesserConfig) => void;
   onRemove?: () => void;
   style?: React.CSSProperties;
   isNewlyPlaced?: boolean;
 }
 
-export function ExpanderModule({
+export function DeesserModule({
   id,
   initialPosition,
   heightUnits,
@@ -37,8 +37,8 @@ export function ExpanderModule({
   onRemove,
   style,
   isNewlyPlaced,
-}: ExpanderModuleProps) {
-  const updateConfig = (updates: Partial<ExpanderConfig>) => {
+}: DeesserModuleProps) {
+  const updateConfig = (updates: Partial<DeesserConfig>) => {
     onChange({ ...config, ...updates });
   };
 
@@ -52,7 +52,7 @@ export function ExpanderModule({
       onDrag={onDrag}
       onHeightReport={onHeightReport}
       onWidthReport={onWidthReport}
-      title="Noise Expander"
+      title="Vocal De-Esser"
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}
       onRemove={onRemove}
@@ -60,21 +60,36 @@ export function ExpanderModule({
       isNewlyPlaced={isNewlyPlaced}
     >
       <p className="module-description">
-        Reduces low-level noise by attenuating signals below the threshold.
+        Transparently reduces harsh sibilant frequencies in vocals.
       </p>
       <div className="control-group">
         <label>
-          Threshold{" "}
-          <span>{(20 * Math.log10(config.threshold)).toFixed(1)} dB</span>
+          Threshold <span>{config.threshold_db.toFixed(1)} dB</span>
           <input
             type="range"
-            min="0.0001"
-            max="0.5"
-            step="0.0001"
-            value={config.threshold}
+            min="-60"
+            max="0"
+            step="0.1"
+            value={config.threshold_db}
             disabled={!config.enabled}
             onChange={(e) =>
-              updateConfig({ threshold: parseFloat(e.target.value) })
+              updateConfig({ threshold_db: parseFloat(e.target.value) })
+            }
+          />
+        </label>
+      </div>
+      <div className="control-group">
+        <label>
+          Frequency <span>{Math.round(config.frequency)} Hz</span>
+          <input
+            type="range"
+            min="1000"
+            max="12000"
+            step="100"
+            value={config.frequency}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              updateConfig({ frequency: parseFloat(e.target.value) })
             }
           />
         </label>
@@ -85,44 +100,12 @@ export function ExpanderModule({
           <input
             type="range"
             min="1.0"
-            max="10.0"
+            max="20.0"
             step="0.1"
             value={config.ratio}
             disabled={!config.enabled}
             onChange={(e) =>
               updateConfig({ ratio: parseFloat(e.target.value) })
-            }
-          />
-        </label>
-      </div>
-      <div className="control-group">
-        <label>
-          Attack <span>{config.attack_ms.toFixed(1)} ms</span>
-          <input
-            type="range"
-            min="0.1"
-            max="100"
-            step="0.1"
-            value={config.attack_ms}
-            disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ attack_ms: parseFloat(e.target.value) })
-            }
-          />
-        </label>
-      </div>
-      <div className="control-group">
-        <label>
-          Release <span>{config.release_ms.toFixed(0)} ms</span>
-          <input
-            type="range"
-            min="10"
-            max="1000"
-            step="1"
-            value={config.release_ms}
-            disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ release_ms: parseFloat(e.target.value) })
             }
           />
         </label>

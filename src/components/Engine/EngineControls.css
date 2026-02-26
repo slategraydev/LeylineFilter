@@ -1,0 +1,19 @@
+.monitoring-toggle {
+    margin-top: 12px;
+}
+
+.monitor-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--color-text-dim);
+    font-weight: 700;
+}
+
+.device-selectors {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}

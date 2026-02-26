@@ -32,8 +32,17 @@ export interface FilterConfig {
   q: number;
 }
 
-export interface VisualizerConfig {
+export interface EQBandConfig {
   enabled: boolean;
+  filter_type: "LowShelf" | "HighShelf" | "Peaking";
+  frequency: number;
+  q: number;
+  gain_db: number;
+}
+
+export interface ParametricEQConfig {
+  enabled: boolean;
+  bands: EQBandConfig[];
 }
 
 export interface FXConfig {
@@ -43,13 +52,43 @@ export interface FXConfig {
   params: Record<string, number>;
 }
 
+export interface DeesserConfig {
+  enabled: boolean;
+  threshold_db: number;
+  ratio: number;
+  attack_ms: number;
+  release_ms: number;
+  frequency: number;
+}
+
+export interface SaturationConfig {
+  enabled: boolean;
+  drive: number;
+  tilt: number;
+  mix: number;
+}
+
+export interface LimiterConfig {
+  enabled: boolean;
+  threshold_db: number;
+  release_ms: number;
+}
+
+export interface DereverbConfig {
+  enabled: boolean;
+  reduction: number;
+  sensitivity: number;
+}
+
 export interface EngineMetrics {
   latency_ms: number;
   cpu_usage: number;
   input_level: number;
+  input_level_db: number;
   buffer_size: number;
   spectrum: number[];
   tonality: number[];
+  waveform: number[];
   state_version: number;
 }
 
@@ -64,6 +103,7 @@ export interface ModuleInfo {
 export interface EngineState {
   modules: ModuleInfo[];
   is_running: boolean;
+  monitoring_enabled: boolean;
   sample_rate: number;
   buffer_size: number;
 }
@@ -74,6 +114,10 @@ export type ModuleConfig =
   | { type: "Gain"; data: GainConfig }
   | { type: "Compressor"; data: CompressorConfig }
   | { type: "Filter"; data: FilterConfig }
+  | { type: "ParametricEQ"; data: ParametricEQConfig }
+  | { type: "Deesser"; data: DeesserConfig }
+  | { type: "Saturation"; data: SaturationConfig }
+  | { type: "Limiter"; data: LimiterConfig }
+  | { type: "Dereverb"; data: DereverbConfig }
   | { type: "FX"; data: FXConfig }
-  | { type: "Visualizer"; data: VisualizerConfig }
   | { type: "None"; data: null };

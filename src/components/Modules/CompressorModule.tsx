@@ -1,8 +1,8 @@
-import { ExpanderConfig } from "../../types";
+import { CompressorConfig } from "../../types";
 import { BaseModule } from "./BaseModule";
 import { GridPosition } from "../../hooks/useDraggable";
 
-interface ExpanderModuleProps {
+interface CompressorModuleProps {
   id: string;
   initialPosition: GridPosition;
   heightUnits: number;
@@ -16,14 +16,14 @@ interface ExpanderModuleProps {
   ) => void;
   onHeightReport?: (id: string, units: number) => void;
   onWidthReport?: (id: string, units: number) => void;
-  config: ExpanderConfig;
-  onChange: (config: ExpanderConfig) => void;
+  config: CompressorConfig;
+  onChange: (config: CompressorConfig) => void;
   onRemove?: () => void;
   style?: React.CSSProperties;
   isNewlyPlaced?: boolean;
 }
 
-export function ExpanderModule({
+export function CompressorModule({
   id,
   initialPosition,
   heightUnits,
@@ -37,8 +37,8 @@ export function ExpanderModule({
   onRemove,
   style,
   isNewlyPlaced,
-}: ExpanderModuleProps) {
-  const updateConfig = (updates: Partial<ExpanderConfig>) => {
+}: CompressorModuleProps) {
+  const updateConfig = (updates: Partial<CompressorConfig>) => {
     onChange({ ...config, ...updates });
   };
 
@@ -52,7 +52,7 @@ export function ExpanderModule({
       onDrag={onDrag}
       onHeightReport={onHeightReport}
       onWidthReport={onWidthReport}
-      title="Noise Expander"
+      title="Dynamic Compressor"
       enabled={config.enabled}
       onToggle={(enabled) => updateConfig({ enabled })}
       onRemove={onRemove}
@@ -60,21 +60,20 @@ export function ExpanderModule({
       isNewlyPlaced={isNewlyPlaced}
     >
       <p className="module-description">
-        Reduces low-level noise by attenuating signals below the threshold.
+        Evens out dynamic peaks for a more professional and consistent sound.
       </p>
       <div className="control-group">
         <label>
-          Threshold{" "}
-          <span>{(20 * Math.log10(config.threshold)).toFixed(1)} dB</span>
+          Threshold <span>{config.threshold_db.toFixed(1)} dB</span>
           <input
             type="range"
-            min="0.0001"
-            max="0.5"
-            step="0.0001"
-            value={config.threshold}
+            min="-60"
+            max="0"
+            step="0.1"
+            value={config.threshold_db}
             disabled={!config.enabled}
             onChange={(e) =>
-              updateConfig({ threshold: parseFloat(e.target.value) })
+              updateConfig({ threshold_db: parseFloat(e.target.value) })
             }
           />
         </label>
@@ -85,12 +84,28 @@ export function ExpanderModule({
           <input
             type="range"
             min="1.0"
-            max="10.0"
+            max="20.0"
             step="0.1"
             value={config.ratio}
             disabled={!config.enabled}
             onChange={(e) =>
               updateConfig({ ratio: parseFloat(e.target.value) })
+            }
+          />
+        </label>
+      </div>
+      <div className="control-group">
+        <label>
+          Knee <span>{config.knee_db.toFixed(1)} dB</span>
+          <input
+            type="range"
+            min="0"
+            max="24"
+            step="0.1"
+            value={config.knee_db}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              updateConfig({ knee_db: parseFloat(e.target.value) })
             }
           />
         </label>
@@ -123,6 +138,22 @@ export function ExpanderModule({
             disabled={!config.enabled}
             onChange={(e) =>
               updateConfig({ release_ms: parseFloat(e.target.value) })
+            }
+          />
+        </label>
+      </div>
+      <div className="control-group">
+        <label>
+          Makeup <span>{config.makeup_gain_db.toFixed(1)} dB</span>
+          <input
+            type="range"
+            min="0"
+            max="24"
+            step="0.1"
+            value={config.makeup_gain_db}
+            disabled={!config.enabled}
+            onChange={(e) =>
+              updateConfig({ makeup_gain_db: parseFloat(e.target.value) })
             }
           />
         </label>

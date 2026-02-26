@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
-import './AddModuleMenu.css';
+import "./AddModuleMenu.css";
 
 interface AddModuleMenuProps {
   onAdd: (type: string) => void;
@@ -9,22 +9,29 @@ interface AddModuleMenuProps {
 }
 
 const MODULE_TYPES = [
-  { label: 'Gain Control', type: 'Gain' },
-  { label: 'Noise Expander', type: 'Expander' },
-  { label: 'Noise Suppression', type: 'RNNoise' },
-  { label: 'Audio Filter', type: 'Filter' },
-  { label: 'Visualizer', type: 'Visualizer' },
+  { label: "Gain Control", type: "Gain" },
+  { label: "Noise Expander", type: "Expander" },
+  { label: "Noise Suppression", type: "RNNoise" },
+  { label: "Audio Filter", type: "Filter" },
+  { label: "Parametric EQ", type: "ParametricEQ" },
+  { label: "Dynamic Compressor", type: "Compressor" },
+  { label: "Vocal De-Esser", type: "Deesser" },
+  { label: "Tube Saturation", type: "Saturation" },
+  { label: "Brickwall Limiter", type: "Limiter" },
+  { label: "Room De-Reverb", type: "Dereverb" },
 ];
 
-export function AddModuleMenu({ onAdd, onClose, existingTypes }: AddModuleMenuProps) {
-  const filteredTypes = MODULE_TYPES.filter(item => !existingTypes.includes(item.type));
+export function AddModuleMenu({
+  onAdd,
+  onClose,
+  existingTypes,
+}: AddModuleMenuProps) {
+  const filteredTypes = MODULE_TYPES.filter(
+    (item) => !existingTypes.includes(item.type),
+  ).sort((a, b) => a.label.localeCompare(b.label));
 
   return (
     <div className="add-module-menu">
-      <div className="menu-header">
-        <span>Add Module</span>
-        <button className="close-menu-btn" onClick={onClose}>&times;</button>
-      </div>
       <div className="menu-items">
         {filteredTypes.length > 0 ? (
           filteredTypes.map((item) => (

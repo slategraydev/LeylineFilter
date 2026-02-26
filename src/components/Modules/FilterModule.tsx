@@ -8,7 +8,12 @@ interface FilterModuleProps {
   heightUnits: number;
   widthUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
-  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
+  onDrag?: (
+    id: string,
+    pos: GridPosition | null,
+    rawOffset?: { x: number; y: number },
+    continuousPos?: GridPosition,
+  ) => void;
   onHeightReport?: (id: string, units: number) => void;
   onWidthReport?: (id: string, units: number) => void;
   config: FilterConfig;
@@ -54,6 +59,9 @@ export function FilterModule({
       style={style}
       isNewlyPlaced={isNewlyPlaced}
     >
+      <p className="module-description">
+        Applies frequency-based attenuation to clear up the signal.
+      </p>
       <div className="control-group">
         <label>
           Type
@@ -76,7 +84,7 @@ export function FilterModule({
       </div>
       <div className="control-group">
         <label>
-          Frequency: {Math.round(config.frequency)} Hz
+          Frequency <span>{Math.round(config.frequency)} Hz</span>
           <input
             type="range"
             min="20"
@@ -92,7 +100,7 @@ export function FilterModule({
       </div>
       <div className="control-group">
         <label>
-          Q: {config.q.toFixed(2)}
+          Q <span>{config.q.toFixed(2)}</span>
           <input
             type="range"
             min="0.1"

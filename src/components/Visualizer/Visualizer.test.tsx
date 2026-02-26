@@ -1,16 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
-import { Visualizer } from "./Visualizer";
+import { Visualizer, LeylineLogo } from "./Visualizer";
 
 describe("Visualizer", () => {
-  it("renders the logo when not running", () => {
-    render(
-      <Visualizer
-        isRunning={false}
-        spectrum={Array(12).fill(0)}
-        tonality={Array(12).fill(0)}
-      />,
-    );
+  it("renders the logo correctly", () => {
+    render(<LeylineLogo />);
     expect(screen.getByLabelText(/Logo/i)).toBeInTheDocument();
   });
 

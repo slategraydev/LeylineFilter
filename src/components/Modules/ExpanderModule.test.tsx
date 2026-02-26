@@ -1,8 +1,8 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import { ExpanderModule } from './ExpanderModule';
+import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { ExpanderModule } from "./ExpanderModule";
 
-describe('ExpanderModule', () => {
+describe("ExpanderModule", () => {
   const defaultConfig = {
     enabled: true,
     threshold: 0.08,
@@ -16,34 +16,55 @@ describe('ExpanderModule', () => {
     initialPosition: { gx: 1, gy: 1 },
     heightUnits: 32,
     widthUnits: 18,
-    onPositionChange: () => { },
-    onHeightReport: () => { },
+    onPositionChange: () => {},
+    onHeightReport: () => {},
   };
 
-  it('renders correctly with default config', () => {
-    render(<ExpanderModule {...defaultProps} config={defaultConfig} onChange={() => { }} />);
+  it("renders correctly with default config", () => {
+    render(
+      <ExpanderModule
+        {...defaultProps}
+        config={defaultConfig}
+        onChange={() => {}}
+      />,
+    );
     expect(screen.getByText(/Noise Expander/i)).toBeInTheDocument();
-    expect(screen.getByText(/Ratio: 2.0:1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ratio/i)).toBeInTheDocument();
+    expect(screen.getByText(/2.0:1/i)).toBeInTheDocument();
   });
 
-  it('calls onChange when values are updated', () => {
+  it("calls onChange when values are updated", () => {
     const onChange = vi.fn();
-    render(<ExpanderModule {...defaultProps} config={defaultConfig} onChange={onChange} />);
+    render(
+      <ExpanderModule
+        {...defaultProps}
+        config={defaultConfig}
+        onChange={onChange}
+      />,
+    );
 
     const thresholdSlider = screen.getByLabelText(/Threshold/i);
-    fireEvent.change(thresholdSlider, { target: { value: '0.1' } });
+    fireEvent.change(thresholdSlider, { target: { value: "0.1" } });
 
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-      threshold: 0.1
-    }));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threshold: 0.1,
+      }),
+    );
   });
 
-  it('disables inputs when module is disabled', () => {
+  it("disables inputs when module is disabled", () => {
     const disabledConfig = { ...defaultConfig, enabled: false };
-    render(<ExpanderModule {...defaultProps} config={disabledConfig} onChange={() => { }} />);
+    render(
+      <ExpanderModule
+        {...defaultProps}
+        config={disabledConfig}
+        onChange={() => {}}
+      />,
+    );
 
-    const sliders = screen.getAllByRole('slider');
-    sliders.forEach(slider => {
+    const sliders = screen.getAllByRole("slider");
+    sliders.forEach((slider) => {
       expect(slider).toBeDisabled();
     });
   });

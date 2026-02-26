@@ -10,17 +10,23 @@ export const GRID_UNIT_PX = 18;
 export const SIDEBAR_WIDTH_PX = 340;
 
 // Module dimensions in Units
-export const MODULE_W_UNITS = 18; // 324px
+export const MODULE_W_UNITS = 20; // 360px
 export const MODULE_H_UNITS = 22; // Default 396px
 export const GAP_UNITS = 1;       // 18px
 
 // Specific heights for intelligent tight-fitting (calculated from content)
 export const MODULE_HEIGHTS: Record<string, number> = {
-  "Gain": 12,
-  "Expander": 32,
+  "Gain": 10,
+  "Expander": 26,
   "RNNoise": 11,
-  "Filter": 24,
-  "Visualizer": 16,
+  "Filter": 20,
+  "Visualizer": 20,
+  "Compressor": 22,
+  "ParametricEQ": 24,
+  "Deesser": 22,
+  "Saturation": 22,
+  "Limiter": 12,
+  "Dereverb": 15,
   "default": 22
 };
 

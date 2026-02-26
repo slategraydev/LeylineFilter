@@ -7,10 +7,15 @@ pub mod synth;
 pub mod utility;
 pub mod voice;
 
+use crate::core::modules::dynamics::compressor::CompressorModule;
+use crate::core::modules::dynamics::deesser::DeesserModule;
 use crate::core::modules::dynamics::expander::ExpanderModule;
+use crate::core::modules::dynamics::limiter::LimiterModule;
 use crate::core::modules::filter::biquad::BiquadModule;
+use crate::core::modules::filter::parametric_eq::ParametricEQModule;
+use crate::core::modules::fx::saturation::SaturationModule;
 use crate::core::modules::utility::gain::GainModule;
-use crate::core::modules::utility::visualizer::VisualizerModule;
+use crate::core::modules::voice::dereverb::DereverbModule;
 use crate::core::modules::voice::rnnoise::RNNoiseModule;
 use crate::core::traits::AudioModule;
 
@@ -30,19 +35,33 @@ impl ModuleFactory {
             "Expander" => Some(Box::new(ExpanderModule::new(sample_rate))),
             "RNNoise" => Some(Box::new(RNNoiseModule::new(sample_rate))),
             "Filter" => Some(Box::new(BiquadModule::new(sample_rate))),
-            "Visualizer" => Some(Box::new(VisualizerModule::new())),
+            "Compressor" => Some(Box::new(CompressorModule::new(sample_rate))),
+            "ParametricEQ" => Some(Box::new(ParametricEQModule::new(sample_rate))),
+            "Deesser" => Some(Box::new(DeesserModule::new(sample_rate))),
+            "Saturation" => Some(Box::new(SaturationModule::new(sample_rate))),
+            "Limiter" => Some(Box::new(LimiterModule::new(sample_rate))),
+            "Dereverb" => Some(Box::new(DereverbModule::new(sample_rate))),
             _ => None,
         }
     }
 
     /// Creates a new audio module instance with a specific ID.
-    pub fn create_with_id(module_type: &str, id: String, sample_rate: f32) -> Option<Box<dyn AudioModule>> {
+    pub fn create_with_id(
+        module_type: &str,
+        id: String,
+        sample_rate: f32,
+    ) -> Option<Box<dyn AudioModule>> {
         match module_type {
             "Gain" => Some(Box::new(GainModule::with_id(id, sample_rate))),
             "Expander" => Some(Box::new(ExpanderModule::with_id(id, sample_rate))),
             "RNNoise" => Some(Box::new(RNNoiseModule::with_id(id, sample_rate))),
             "Filter" => Some(Box::new(BiquadModule::with_id(id, sample_rate))),
-            "Visualizer" => Some(Box::new(VisualizerModule::with_id(id))),
+            "Compressor" => Some(Box::new(CompressorModule::with_id(id, sample_rate))),
+            "ParametricEQ" => Some(Box::new(ParametricEQModule::with_id(id, sample_rate))),
+            "Deesser" => Some(Box::new(DeesserModule::with_id(id, sample_rate))),
+            "Saturation" => Some(Box::new(SaturationModule::with_id(id, sample_rate))),
+            "Limiter" => Some(Box::new(LimiterModule::with_id(id, sample_rate))),
+            "Dereverb" => Some(Box::new(DereverbModule::with_id(id, sample_rate))),
             _ => None,
         }
     }

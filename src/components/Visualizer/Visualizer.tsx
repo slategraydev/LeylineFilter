@@ -78,7 +78,7 @@ export function Visualizer({ isRunning, spectrum, tonality }: VisualizerProps) {
 
   return (
     <div className="visualizer-container">
-      {isRunning ? <div className="bars-wrapper">{bars}</div> : <LeylineLogo />}
+      <div className="bars-wrapper">{bars}</div>
     </div>
   );
 }

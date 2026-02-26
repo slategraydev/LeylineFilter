@@ -97,7 +97,7 @@ impl SignalChain {
         self.modules.iter().map(|m| m.latency_samples()).sum()
     }
 
-    pub fn get_state(&self, is_running: bool, buffer_size: u32) -> EngineState {
+    pub fn get_state(&self, is_running: bool, buffer_size: u32, monitoring_enabled: bool) -> EngineState {
         let modules = self
             .modules
             .iter()
@@ -113,6 +113,7 @@ impl SignalChain {
         EngineState {
             modules,
             is_running,
+            monitoring_enabled,
             sample_rate: self.sample_rate,
             buffer_size,
         }
@@ -143,7 +144,7 @@ mod tests {
         assert_eq!(chain.modules()[1].id(), id1);
 
         // State
-        let state = chain.get_state(true, 256);
+        let state = chain.get_state(true, 256, true);
         assert_eq!(state.modules.len(), 2);
         assert!(state.is_running);
         assert_eq!(state.buffer_size, 256);

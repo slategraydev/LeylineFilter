@@ -11,6 +11,7 @@ import { EngineMetrics, EngineState } from "../types";
  */
 export function useEngine() {
   const [isRunning, setIsRunning] = useState(false);
+  const [isMonitoring, setIsMonitoring] = useState(true);
   const [inputDevices, setInputDevices] = useState<string[]>([]);
   const [outputDevices, setOutputDevices] = useState<string[]>([]);
   const [engineState, setEngineState] = useState<EngineState | null>(null);
@@ -18,9 +19,11 @@ export function useEngine() {
     latency_ms: 0,
     cpu_usage: 0,
     input_level: 0,
+    input_level_db: -60,
     buffer_size: 256,
     spectrum: Array(12).fill(0),
     tonality: Array(12).fill(0),
+    waveform: Array(64).fill(0),
     state_version: 0,
   });
 
@@ -53,16 +56,20 @@ export function useEngine() {
      */
     const interval = setInterval(async () => {
       try {
-        const m = await invoke<EngineMetrics & { state_version: number }>("get_metrics");
+        const m = await invoke<EngineMetrics & { state_version: number }>(
+          "get_metrics",
+        );
 
         // Comprehensive safety check for every property
         const safeMetrics: EngineMetrics = {
           latency_ms: m?.latency_ms ?? 0,
           cpu_usage: m?.cpu_usage ?? 0,
           input_level: m?.input_level ?? 0,
+          input_level_db: m?.input_level_db ?? -60,
           buffer_size: m?.buffer_size ?? 256,
           spectrum: Array.isArray(m?.spectrum) ? m.spectrum : Array(12).fill(0),
           tonality: Array.isArray(m?.tonality) ? m.tonality : Array(12).fill(0),
+          waveform: Array.isArray(m?.waveform) ? m.waveform : Array(64).fill(0),
           state_version: m?.state_version ?? 0,
         };
 
@@ -78,6 +85,7 @@ export function useEngine() {
           if (state) {
             setEngineState(state);
             setIsRunning(state.is_running ?? false);
+            setIsMonitoring(state.monitoring_enabled ?? true);
             setLastVersion(safeMetrics.state_version);
           }
         }
@@ -88,9 +96,20 @@ export function useEngine() {
     return () => clearInterval(interval);
   }, [lastVersion]); // Dependency on lastVersion to ensure state updates correctly in closure
 
+  const setMonitoring = async (enabled: boolean) => {
+    try {
+      await invoke("set_monitoring", { enabled });
+      setIsMonitoring(enabled);
+    } catch (e) {
+      console.error("Failed to toggle monitoring:", e);
+    }
+  };
+
   const startEngine = async (inputDevice: string, outputDevice: string) => {
     try {
-      console.log(`Starting engine with Input: ${inputDevice}, Output: ${outputDevice}`);
+      console.log(
+        `Starting engine with Input: ${inputDevice}, Output: ${outputDevice}`,
+      );
       await invoke("start_engine", {
         input_device: inputDevice === "Default" ? null : inputDevice,
         output_device: outputDevice === "Default" ? null : outputDevice,
@@ -117,8 +136,8 @@ export function useEngine() {
       await invoke("send_command", {
         command: {
           type: "AddModule",
-          data: { module_type: moduleType }
-        }
+          data: { module_type: moduleType },
+        },
       });
     } catch (e) {
       console.error("Failed to add module:", e);
@@ -130,8 +149,8 @@ export function useEngine() {
       await invoke("send_command", {
         command: {
           type: "RemoveModule",
-          data: { id }
-        }
+          data: { id },
+        },
       });
     } catch (e) {
       console.error("Failed to remove module:", e);
@@ -140,12 +159,14 @@ export function useEngine() {
 
   return {
     isRunning,
+    isMonitoring,
     inputDevices,
     outputDevices,
     engineState,
     metrics,
     startEngine,
     stopEngine,
+    setMonitoring,
     addModule,
     removeModule,
   };
