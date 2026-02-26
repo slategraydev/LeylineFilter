@@ -178,6 +178,14 @@ pub struct AudioEngine {
     // Persistent chain for offline management
     offline_chain: Arc<Mutex<SignalChain>>,
     prefill_samples: usize,
+    // Device Tracking for Persistence
+    input_device_name: Arc<Mutex<Option<String>>>,
+    output_device_name: Arc<Mutex<Option<String>>>,
+    monitor_device_name: Arc<Mutex<Option<String>>>,
+    // Layout Tracking
+    pub positions: Arc<Mutex<HashMap<String, crate::core::persistence::GridPosition>>>,
+    pub heights: Arc<Mutex<HashMap<String, u32>>>,
+    pub widths: Arc<Mutex<HashMap<String, u32>>>,
 }
 
 impl AudioEngine {
@@ -226,6 +234,12 @@ impl AudioEngine {
                 monitoring_enabled: false,
                 sample_rate: initial_sr,
                 buffer_size: initial_bs,
+                input_device: Some("Default".to_string()),
+                output_device: Some("Default".to_string()),
+                monitor_device: None,
+                positions: HashMap::new(),
+                heights: HashMap::new(),
+                widths: HashMap::new(),
             })),
             last_cpu_update: Instant::now(),
             vis_thread: None,
@@ -233,6 +247,97 @@ impl AudioEngine {
             garbage_rx: None,
             offline_chain,
             prefill_samples: 0,
+            input_device_name: Arc::new(Mutex::new(Some("Default".to_string()))),
+            output_device_name: Arc::new(Mutex::new(Some("Default".to_string()))),
+            monitor_device_name: Arc::new(Mutex::new(None)),
+            positions: Arc::new(Mutex::new(HashMap::new())),
+            heights: Arc::new(Mutex::new(HashMap::new())),
+            widths: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub fn get_persistence_config(&self) -> crate::core::persistence::AppConfig {
+        let in_dev = self.input_device_name.lock().unwrap().clone();
+        let out_dev = self.output_device_name.lock().unwrap().clone();
+        let mon_dev = self.monitor_device_name.lock().unwrap().clone();
+        let mon_en = self.monitoring_enabled.load(Ordering::Relaxed);
+        let running = self.is_running();
+
+        let modules = if let Ok(offline) = self.offline_chain.lock() {
+            offline.get_state(
+                running,
+                self.buffer_size,
+                mon_en,
+                in_dev.clone(),
+                out_dev.clone(),
+                mon_dev.clone(),
+                self.positions.lock().unwrap().clone(),
+                self.heights.lock().unwrap().clone(),
+                self.widths.lock().unwrap().clone(),
+            ).modules
+        } else {
+            Vec::new()
+        };
+
+        crate::core::persistence::AppConfig {
+            input_device: in_dev,
+            output_device: out_dev,
+            monitor_device: mon_dev,
+            monitoring_enabled: mon_en,
+            engine_running: running,
+            modules,
+            positions: self.positions.lock().unwrap().clone(),
+            heights: self.heights.lock().unwrap().clone(),
+            widths: self.widths.lock().unwrap().clone(),
+        }
+    }
+
+    pub fn apply_persistence_config(&self, config: crate::core::persistence::AppConfig) {
+        *self.input_device_name.lock().unwrap() = config.input_device.clone();
+        *self.output_device_name.lock().unwrap() = config.output_device.clone();
+        *self.monitor_device_name.lock().unwrap() = config.monitor_device.clone();
+        *self.positions.lock().unwrap() = config.positions.clone();
+        *self.heights.lock().unwrap() = config.heights.clone();
+        *self.widths.lock().unwrap() = config.widths.clone();
+        self.monitoring_enabled
+            .store(config.monitoring_enabled, Ordering::Relaxed);
+
+        if let Ok(mut offline) = self.offline_chain.lock() {
+            // Clear current chain
+            let current_ids: Vec<String> = offline.modules().iter().map(|m| m.id().to_string()).collect();
+            for id in current_ids {
+                offline.remove_module(&id);
+            }
+
+            // Add modules from config
+            for m_info in config.modules {
+                if let Some(mut m) = ModuleFactory::create_with_id(
+                    &m_info.name,
+                    m_info.id,
+                    self.internal_sample_rate,
+                ) {
+                    m.update_config(&m_info.config);
+                    offline.add_module(m);
+                }
+            }
+
+            // Sync state back to UI
+            if !self.is_running() {
+                if let Ok(mut state_lock) = self.chain_state.lock() {
+                    *state_lock = offline.get_state(
+                        false,
+                        self.buffer_size,
+                        config.monitoring_enabled,
+                        config.input_device,
+                        config.output_device,
+                        config.monitor_device,
+                        config.positions,
+                        config.heights,
+                        config.widths,
+                    );
+                    self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
+                }
+            }
         }
     }
 
@@ -360,7 +465,13 @@ impl AudioEngine {
             if !self.is_running() {
                 if let Ok(mut state_lock) = self.chain_state.lock() {
                     let is_mon = self.monitoring_enabled.load(Ordering::Relaxed);
-                    *state_lock = offline.get_state(false, self.buffer_size, is_mon);
+                    let in_dev = self.input_device_name.lock().unwrap().clone();
+                    let out_dev = self.output_device_name.lock().unwrap().clone();
+                    let mon_dev = self.monitor_device_name.lock().unwrap().clone();
+                    let pos = self.positions.lock().unwrap().clone();
+                    let h = self.heights.lock().unwrap().clone();
+                    let w = self.widths.lock().unwrap().clone();
+                    *state_lock = offline.get_state(false, self.buffer_size, is_mon, in_dev, out_dev, mon_dev, pos, h, w);
                     self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
                 }
             }
@@ -426,6 +537,12 @@ impl AudioEngine {
                 monitoring_enabled: self.monitoring_enabled.load(Ordering::Relaxed),
                 sample_rate: self.sample_rate,
                 buffer_size: self.buffer_size,
+                input_device: self.input_device_name.lock().unwrap().clone(),
+                output_device: self.output_device_name.lock().unwrap().clone(),
+                monitor_device: self.monitor_device_name.lock().unwrap().clone(),
+                positions: self.positions.lock().unwrap().clone(),
+                heights: self.heights.lock().unwrap().clone(),
+                widths: self.widths.lock().unwrap().clone(),
             }
         }
     }
@@ -499,6 +616,11 @@ impl AudioEngine {
 
         log::info!("Selected Input Device: {}", actual_in);
         log::info!("Selected Output Device: {}", actual_out);
+
+        // Update tracked device names for persistence
+        *self.input_device_name.lock().unwrap() = input_device_name.clone();
+        *self.output_device_name.lock().unwrap() = output_device_name.clone();
+        *self.monitor_device_name.lock().unwrap() = monitor_device_name.clone();
 
         let input_default = input_device.default_input_config()?;
         let output_default = output_device.default_output_config()?;
@@ -594,7 +716,17 @@ impl AudioEngine {
         // Populate from offline chain
         if let Ok(offline) = self.offline_chain.lock() {
             let is_mon = self.monitoring_enabled.load(Ordering::Relaxed);
-            for m_info in offline.get_state(false, 0, is_mon).modules {
+            let in_dev = self.input_device_name.lock().unwrap().clone();
+            let out_dev = self.output_device_name.lock().unwrap().clone();
+            let mon_dev = self.monitor_device_name.lock().unwrap().clone();
+            let pos = self.positions.lock().unwrap().clone();
+            let h = self.heights.lock().unwrap().clone();
+            let w = self.widths.lock().unwrap().clone();
+
+            for m_info in offline
+                .get_state(false, 0, is_mon, in_dev, out_dev, mon_dev, pos, h, w)
+                .modules
+            {
                 // Use the module's name and original ID to re-create it
                 if let Some(mut m) =
                     ModuleFactory::create_with_id(&m_info.name, m_info.id, internal_sample_rate)
@@ -648,7 +780,20 @@ impl AudioEngine {
 
         if let Ok(mut state_lock) = self.chain_state.lock() {
             let is_mon = monitoring_enabled_flag.load(Ordering::Relaxed);
-            *state_lock = chain.get_state(true, 0, is_mon); // Start with 0, will be updated by callback
+            let pos = self.positions.lock().unwrap().clone();
+            let h = self.heights.lock().unwrap().clone();
+            let w = self.widths.lock().unwrap().clone();
+            *state_lock = chain.get_state(
+                true,
+                0,
+                is_mon,
+                input_device_name.clone(),
+                output_device_name.clone(),
+                monitor_device_name.clone(),
+                pos,
+                h,
+                w,
+            ); // Start with 0, will be updated by callback
             state_lock.monitoring_enabled = is_mon;
             self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
         }
@@ -747,6 +892,12 @@ impl AudioEngine {
         let mut resample_buf = vec![vec![0.0f32; 0]];
 
         let chain_state_clone = self.chain_state.clone();
+        let in_dev_captured = input_device_name.clone();
+        let out_dev_captured = output_device_name.clone();
+        let mon_dev_captured = monitor_device_name.clone();
+        let pos_captured = self.positions.clone();
+        let h_captured = self.heights.clone();
+        let w_captured = self.widths.clone();
 
         // --- INPUT STREAM (Audio Thread) ---
         // This closure runs on the high-priority audio thread.
@@ -802,7 +953,17 @@ impl AudioEngine {
                     if let Ok(mut state_lock) = chain_state_clone.try_lock() {
                         let current_buf = metrics.buffer_size.load(Ordering::Relaxed);
                         let is_mon = monitoring_enabled_flag.load(Ordering::Relaxed);
-                        *state_lock = chain.get_state(true, current_buf, is_mon);
+                        *state_lock = chain.get_state(
+                            true,
+                            current_buf,
+                            is_mon,
+                            in_dev_captured.clone(),
+                            out_dev_captured.clone(),
+                            mon_dev_captured.clone(),
+                            pos_captured.lock().unwrap().clone(),
+                            h_captured.lock().unwrap().clone(),
+                            w_captured.lock().unwrap().clone(),
+                        );
                         state_lock.monitoring_enabled = is_mon;
                         metrics.state_version.fetch_add(1, Ordering::Relaxed);
                     }

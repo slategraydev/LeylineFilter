@@ -1,7 +1,6 @@
 import React from "react";
 import { BaseModule } from "./BaseModule";
-import { DereverbConfig } from "../../types";
-import { GridPosition } from "../../hooks/useDraggable";
+import { DereverbConfig, GridPosition } from "../../types";
 
 interface DereverbModuleProps {
   id: string;

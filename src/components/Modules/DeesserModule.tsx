@@ -1,6 +1,5 @@
-import { DeesserConfig } from "../../types";
+import { DeesserConfig, GridPosition } from "../../types";
 import { BaseModule } from "./BaseModule";
-import { GridPosition } from "../../hooks/useDraggable";
 
 interface DeesserModuleProps {
   id: string;

@@ -137,6 +137,12 @@ pub struct EngineState {
     pub monitoring_enabled: bool,
     pub sample_rate: f32,
     pub buffer_size: u32,
+    pub input_device: Option<String>,
+    pub output_device: Option<String>,
+    pub monitor_device: Option<String>,
+    pub positions: std::collections::HashMap<String, crate::core::persistence::GridPosition>,
+    pub heights: std::collections::HashMap<String, u32>,
+    pub widths: std::collections::HashMap<String, u32>,
 }
 
 /// Categories for audio modules to help with UI organization and processing order.

@@ -29,8 +29,8 @@ import {
   LimiterConfig,
   DereverbConfig,
   ModuleConfig,
+  GridPosition,
 } from "./types";
-import { GridPosition } from "./hooks/useDraggable";
 import { findFreeSlot } from "./utils/layout";
 import {
   GRID_UNIT_PX,
@@ -50,7 +50,11 @@ function App() {
     inputDevices,
     outputDevices,
     monitorDevice,
+    selectedInput,
+    selectedOutput,
     setMonitorDevice,
+    setSelectedInput,
+    setSelectedOutput,
     engineState,
     metrics,
     startEngine,
@@ -59,13 +63,6 @@ function App() {
     addModule,
     removeModule,
   } = useEngine();
-
-  const [selectedInput, setSelectedInput] = useState<string>(
-    () => localStorage.getItem("device_input") ?? "Default"
-  );
-  const [selectedOutput, setSelectedOutput] = useState<string>(
-    () => localStorage.getItem("device_output") ?? "Default"
-  );
 
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [newlyPlacedIds, setNewlyPlacedIds] = useState<Set<string>>(new Set());
@@ -116,6 +113,18 @@ function App() {
     },
   );
 
+  // --- Initial Layout Restoration ---
+  // If the backend has a saved layout (from session.json), use it.
+  // Otherwise, fallback to localStorage.
+  useEffect(() => {
+    if (engineState && Object.keys(engineState.positions || {}).length > 0) {
+      console.log("Restoring layout from engine state...");
+      setPositions(engineState.positions);
+      setModuleHeights(engineState.heights || {});
+      setModuleWidths(engineState.widths || {});
+    }
+  }, [engineState === null]); // Run once when engineState first arrives
+
   // Helper to find the next empty slot in the grid (used only for NEW modules)
   const findNextAvailableSlot = (
     currentPositions: Record<string, GridPosition>,
@@ -145,6 +154,19 @@ function App() {
       maxGx,
     );
   };
+
+  useEffect(() => {
+    // --- Layout Sync to Backend ---
+    // This ensures the backend AppConfig stays in sync for session persistence.
+    // We only sync if there is actually data to sync.
+    if (Object.keys(positions).length > 0) {
+      invoke("update_layout", {
+        positions,
+        heights: moduleHeights,
+        widths: moduleWidths,
+      }).catch((e) => console.error("Failed to sync layout to backend:", e));
+    }
+  }, [positions, moduleHeights, moduleWidths]);
 
   // Sync positions when new modules appear
   useEffect(() => {
@@ -236,9 +258,7 @@ function App() {
     });
   };
 
-
   useEffect(() => {
-
     if (!showAddMenu) return;
 
     const handleContext = (_e: MouseEvent) => {
@@ -273,7 +293,6 @@ function App() {
 
   const handleInputChange = (device: string) => {
     setSelectedInput(device);
-    localStorage.setItem("device_input", device);
     if (isRunning) {
       startEngine(device, selectedOutput, monitorDevice);
     }
@@ -281,7 +300,6 @@ function App() {
 
   const handleOutputChange = (device: string) => {
     setSelectedOutput(device);
-    localStorage.setItem("device_output", device);
     if (isRunning) {
       startEngine(selectedInput, device, monitorDevice);
     }
@@ -588,6 +606,14 @@ function App() {
         </div>
 
         <div className="sidebar-footer">
+          <button
+            className="save-session-btn"
+            onClick={() => {
+              invoke("save_session").then(() => console.log("Session Saved"));
+            }}
+          >
+            Save Session
+          </button>
           <button
             className={`engine-toggle ${isRunning ? "stop" : "start"}`}
             onClick={toggleEngine}

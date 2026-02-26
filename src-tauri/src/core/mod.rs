@@ -3,5 +3,6 @@
 pub mod audio;
 pub mod chain;
 pub mod modules;
+pub mod persistence;
 pub mod traits;
 pub mod visualizer;

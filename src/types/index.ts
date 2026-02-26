@@ -100,12 +100,23 @@ export interface ModuleInfo {
   config: ModuleConfig;
 }
 
+export interface GridPosition {
+  gx: number;
+  gy: number;
+}
+
 export interface EngineState {
   modules: ModuleInfo[];
   is_running: boolean;
   monitoring_enabled: boolean;
   sample_rate: number;
   buffer_size: number;
+  input_device: string | null;
+  output_device: string | null;
+  monitor_device: string | null;
+  positions: Record<string, GridPosition>;
+  heights: Record<string, number>;
+  widths: Record<string, number>;
 }
 
 export type ModuleConfig =

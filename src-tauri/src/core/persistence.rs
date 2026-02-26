@@ -1,0 +1,46 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
+use serde::{Deserialize, Serialize};
+use crate::core::traits::ModuleInfo;
+use std::collections::HashMap;
+
+/// # Grid Position
+/// A logical position in the module grid.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct GridPosition {
+    pub gx: i32,
+    pub gy: i32,
+}
+
+/// # App Configuration
+/// This struct represents the full state of the application that should be persisted.
+/// It includes both the signal chain and the hardware selection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppConfig {
+    pub input_device: Option<String>,
+    pub output_device: Option<String>,
+    pub monitor_device: Option<String>,
+    pub monitoring_enabled: bool,
+    pub engine_running: bool,
+    pub modules: Vec<ModuleInfo>,
+    // UI Layout Persistence
+    pub positions: HashMap<String, GridPosition>,
+    pub heights: HashMap<String, u32>,
+    pub widths: HashMap<String, u32>,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            input_device: Some("Default".to_string()),
+            output_device: Some("Default".to_string()),
+            monitor_device: None,
+            monitoring_enabled: false,
+            engine_running: false,
+            modules: Vec::new(),
+            positions: HashMap::new(),
+            heights: HashMap::new(),
+            widths: HashMap::new(),
+        }
+    }
+}

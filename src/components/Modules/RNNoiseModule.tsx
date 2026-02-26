@@ -1,6 +1,5 @@
-import { RNNoiseConfig } from "../../types";
+import { RNNoiseConfig, GridPosition } from "../../types";
 import { BaseModule } from "./BaseModule";
-import { GridPosition } from "../../hooks/useDraggable";
 
 interface RNNoiseModuleProps {
   id: string;

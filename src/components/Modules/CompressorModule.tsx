@@ -1,6 +1,5 @@
-import { CompressorConfig } from "../../types";
+import { CompressorConfig, GridPosition } from "../../types";
 import { BaseModule } from "./BaseModule";
-import { GridPosition } from "../../hooks/useDraggable";
 
 interface CompressorModuleProps {
   id: string;

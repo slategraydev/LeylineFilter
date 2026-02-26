@@ -1,6 +1,5 @@
-import { ParametricEQConfig, EQBandConfig } from "../../types";
+import { ParametricEQConfig, GridPosition, EQBandConfig } from "../../types";
 import { BaseModule } from "./BaseModule";
-import { GridPosition } from "../../hooks/useDraggable";
 import "./ParametricEQModule.css";
 
 interface ParametricEQModuleProps {

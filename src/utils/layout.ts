@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
-import { GridPosition } from '../hooks/useDraggable';
-import { GAP_UNITS, MODULE_W_UNITS } from '../constants';
+import { GridPosition } from "../types";
+import { GAP_UNITS, MODULE_W_UNITS } from "../constants";
 
 /**
  * # Layout Resolver
@@ -13,7 +13,7 @@ export const findFreeSlot = (
   existingPositions: Record<string, GridPosition>,
   getH: (mid: string) => number,
   getW: (mid: string) => number,
-  maxGx: number
+  maxGx: number,
 ): GridPosition => {
   const existingIds = Object.keys(existingPositions);
   if (existingIds.length === 0) return { gx: 1, gy: 1 };
@@ -26,15 +26,19 @@ export const findFreeSlot = (
   // Search up to 500 rows deep
   for (let gy = 1; gy < 500; gy++) {
     for (let col = 0; col < numCols; col++) {
-      const gx = 1 + (col * colWidth);
+      const gx = 1 + col * colWidth;
 
-      const hasOverlap = existingIds.some(id => {
+      const hasOverlap = existingIds.some((id) => {
         const otherPos = existingPositions[id];
         const otherH = getH(id);
         const otherW = getW(id);
 
-        const hOverlap = gx < otherPos.gx + otherW + GAP_UNITS && gx + MODULE_W_UNITS + GAP_UNITS > otherPos.gx;
-        const vOverlap = gy < otherPos.gy + otherH + GAP_UNITS && gy + moduleH + GAP_UNITS > otherPos.gy;
+        const hOverlap =
+          gx < otherPos.gx + otherW + GAP_UNITS &&
+          gx + MODULE_W_UNITS + GAP_UNITS > otherPos.gx;
+        const vOverlap =
+          gy < otherPos.gy + otherH + GAP_UNITS &&
+          gy + moduleH + GAP_UNITS > otherPos.gy;
         return hOverlap && vOverlap;
       });
 

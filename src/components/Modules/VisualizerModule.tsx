@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
-import { BaseModule } from './BaseModule';
-import { Visualizer } from '../Visualizer/Visualizer';
-import { GridPosition } from '../../hooks/useDraggable';
+import { BaseModule } from "./BaseModule";
+import { Visualizer } from "../Visualizer/Visualizer";
+import { GridPosition } from "../../types";
 
 interface VisualizerModuleProps {
   id: string;
@@ -10,7 +10,12 @@ interface VisualizerModuleProps {
   heightUnits: number;
   widthUnits: number;
   onPositionChange: (id: string, pos: GridPosition) => void;
-  onDrag?: (id: string, pos: GridPosition | null, rawOffset?: { x: number, y: number }, continuousPos?: GridPosition) => void;
+  onDrag?: (
+    id: string,
+    pos: GridPosition | null,
+    rawOffset?: { x: number; y: number },
+    continuousPos?: GridPosition,
+  ) => void;
   onHeightReport?: (id: string, units: number) => void;
   onWidthReport?: (id: string, units: number) => void;
   enabled: boolean;
@@ -63,7 +68,9 @@ export function VisualizerModule({
       style={style}
       isNewlyPlaced={isNewlyPlaced}
     >
-      <div style={{ flex: 1, minHeight: '100px', width: '100%', marginTop: '4px' }}>
+      <div
+        style={{ flex: 1, minHeight: "100px", width: "100%", marginTop: "4px" }}
+      >
         <Visualizer
           isRunning={isRunning && enabled}
           spectrum={spectrum}
