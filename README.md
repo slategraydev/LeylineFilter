@@ -2,6 +2,8 @@
 
 LeylineFilter is a high-performance, modular audio processing engine built with Rust and Tauri. It provides real-time noise suppression and neural sound gating with professional-grade stability and audio quality.
 
+<img width="700" alt="image" src="https://github.com/user-attachments/assets/e993d138-f8c8-4fe5-ba50-57c6b25c8eef" />
+
 ## Features
 
 - **Dynamic Signal Chain**: A modular processing chain that supports adding, removing, and reordering modules in real-time without interrupting the audio stream.
@@ -60,3 +62,4 @@ src-tauri/
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
+
