@@ -58,9 +58,3 @@ src-tauri/
 2. Install frontend dependencies: `npm install`
 3. Run in development: `npm run tauri dev`
 4. Run tests: `npm test` or `cd src-tauri && cargo test`
-
-## License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
-
