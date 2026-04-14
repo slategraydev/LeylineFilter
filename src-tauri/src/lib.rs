@@ -104,11 +104,7 @@ async fn load_session(
 
     // If it was running, try to restart it
     if config.engine_running {
-        let _ = engine.start(
-            config.input_device,
-            config.output_device,
-            None,
-        );
+        let _ = engine.start(config.input_device, config.output_device, None);
     }
 
     log::info!("Session loaded successfully");

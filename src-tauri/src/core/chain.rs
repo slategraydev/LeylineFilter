@@ -144,8 +144,8 @@ impl SignalChain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use crate::core::modules::ModuleFactory;
+    use std::collections::HashMap;
 
     #[test]
     fn test_chain_management() {
@@ -166,7 +166,16 @@ mod tests {
         assert_eq!(chain.modules()[1].id(), id1);
 
         // State
-        let state = chain.get_state(true, 256, true, None, None, HashMap::new(), HashMap::new(), HashMap::new());
+        let state = chain.get_state(
+            true,
+            256,
+            true,
+            None,
+            None,
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+        );
         assert_eq!(state.modules.len(), 2);
         assert!(state.is_running);
         assert_eq!(state.buffer_size, 256);

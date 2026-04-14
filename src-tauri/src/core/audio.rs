@@ -266,16 +266,18 @@ impl AudioEngine {
         let running = self.is_running();
 
         let modules = if let Ok(offline) = self.offline_chain.lock() {
-            offline.get_state(
-                running,
-                self.buffer_size,
-                mon_en,
-                in_dev.clone(),
-                out_dev.clone(),
-                self.positions.lock().unwrap().clone(),
-                self.heights.lock().unwrap().clone(),
-                self.widths.lock().unwrap().clone(),
-            ).modules
+            offline
+                .get_state(
+                    running,
+                    self.buffer_size,
+                    mon_en,
+                    in_dev.clone(),
+                    out_dev.clone(),
+                    self.positions.lock().unwrap().clone(),
+                    self.heights.lock().unwrap().clone(),
+                    self.widths.lock().unwrap().clone(),
+                )
+                .modules
         } else {
             Vec::new()
         };
@@ -303,7 +305,11 @@ impl AudioEngine {
 
         if let Ok(mut offline) = self.offline_chain.lock() {
             // Clear current chain
-            let current_ids: Vec<String> = offline.modules().iter().map(|m| m.id().to_string()).collect();
+            let current_ids: Vec<String> = offline
+                .modules()
+                .iter()
+                .map(|m| m.id().to_string())
+                .collect();
             for id in current_ids {
                 offline.remove_module(&id);
             }
@@ -476,7 +482,16 @@ impl AudioEngine {
                     let pos = self.positions.lock().unwrap().clone();
                     let h = self.heights.lock().unwrap().clone();
                     let w = self.widths.lock().unwrap().clone();
-                    *state_lock = offline.get_state(false, self.buffer_size, is_mon, in_dev, out_dev, pos, h, w);
+                    *state_lock = offline.get_state(
+                        false,
+                        self.buffer_size,
+                        is_mon,
+                        in_dev,
+                        out_dev,
+                        pos,
+                        h,
+                        w,
+                    );
                     self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
                 }
             }
@@ -1119,11 +1134,11 @@ impl AudioEngine {
         let out_channels_out = output_config.channels as usize;
 
         let actual_out_name = output_device.name().unwrap_or_default();
-        let is_virtual_out = actual_out_name.to_lowercase().contains("cable") ||
-                            actual_out_name.to_lowercase().contains("virtual") ||
-                            actual_out_name.to_lowercase().contains("blackhole") ||
-                            actual_out_name.to_lowercase().contains("monitor") ||
-                            actual_out_name.to_lowercase().contains("pipewire");
+        let is_virtual_out = actual_out_name.to_lowercase().contains("cable")
+            || actual_out_name.to_lowercase().contains("virtual")
+            || actual_out_name.to_lowercase().contains("blackhole")
+            || actual_out_name.to_lowercase().contains("monitor")
+            || actual_out_name.to_lowercase().contains("pipewire");
 
         let monitoring_enabled_for_out = self.monitoring_enabled.clone();
 
@@ -1145,7 +1160,8 @@ impl AudioEngine {
                         .buffer_size
                         .store(frames_needed as u32, Ordering::Relaxed);
 
-                    let is_unmuted = monitoring_enabled_for_out.load(Ordering::Relaxed) || is_virtual_out;
+                    let is_unmuted =
+                        monitoring_enabled_for_out.load(Ordering::Relaxed) || is_virtual_out;
 
                     for i in 0..frames_needed {
                         let sample = consumer.try_pop().unwrap_or(0.0);
@@ -1177,11 +1193,16 @@ impl AudioEngine {
                             .buffer_size
                             .store(frames_needed as u32, Ordering::Relaxed);
 
-                        let is_unmuted = monitoring_enabled_i16.load(Ordering::Relaxed) || is_virtual_out;
+                        let is_unmuted =
+                            monitoring_enabled_i16.load(Ordering::Relaxed) || is_virtual_out;
 
                         for i in 0..frames_needed {
                             let sample = consumer.try_pop().unwrap_or(0.0);
-                            let s16 = if is_unmuted { (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16 } else { 0 };
+                            let s16 = if is_unmuted {
+                                (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16
+                            } else {
+                                0
+                            };
                             for c in 0..out_channels_out {
                                 data[i * out_channels_out + c] = s16;
                             }
@@ -1191,7 +1212,7 @@ impl AudioEngine {
                     |err| log::error!("Output stream error: {}", err),
                     None,
                 )?
-            },
+            }
             cpal::SampleFormat::I32 => {
                 let monitoring_enabled_i32 = self.monitoring_enabled.clone();
                 output_device.build_output_stream(
@@ -1211,11 +1232,16 @@ impl AudioEngine {
                             .buffer_size
                             .store(frames_needed as u32, Ordering::Relaxed);
 
-                        let is_unmuted = monitoring_enabled_i32.load(Ordering::Relaxed) || is_virtual_out;
+                        let is_unmuted =
+                            monitoring_enabled_i32.load(Ordering::Relaxed) || is_virtual_out;
 
                         for i in 0..frames_needed {
                             let sample = consumer.try_pop().unwrap_or(0.0);
-                            let s32 = if is_unmuted { (sample.clamp(-1.0, 1.0) * i32::MAX as f32) as i32 } else { 0 };
+                            let s32 = if is_unmuted {
+                                (sample.clamp(-1.0, 1.0) * i32::MAX as f32) as i32
+                            } else {
+                                0
+                            };
                             for c in 0..out_channels_out {
                                 data[i * out_channels_out + c] = s32;
                             }
@@ -1225,7 +1251,7 @@ impl AudioEngine {
                     |err| log::error!("Output stream error: {}", err),
                     None,
                 )?
-            },
+            }
 
             fmt => {
                 return Err(EngineError::DeviceError(format!(
@@ -1249,11 +1275,11 @@ impl AudioEngine {
         // 2. If output is already a physical device (Speakers), we DO NOT open a second stream
         //    because the primary output stream already handles the audible audio.
         self.monitor_stream = if monitoring_enabled_flag.load(Ordering::Relaxed) {
-            let is_virtual = actual_out.to_lowercase().contains("cable") ||
-                            actual_out.to_lowercase().contains("virtual") ||
-                            actual_out.to_lowercase().contains("blackhole") ||
-                            actual_out.to_lowercase().contains("monitor") ||
-                            actual_out.to_lowercase().contains("pipewire");
+            let is_virtual = actual_out.to_lowercase().contains("cable")
+                || actual_out.to_lowercase().contains("virtual")
+                || actual_out.to_lowercase().contains("blackhole")
+                || actual_out.to_lowercase().contains("monitor")
+                || actual_out.to_lowercase().contains("pipewire");
 
             if is_virtual {
                 let mon_device_opt = host.default_output_device();
@@ -1262,9 +1288,12 @@ impl AudioEngine {
                     let mon_name = mon_device.name().unwrap_or_else(|_| "Unknown".to_string());
                     log::info!("Opening Automatic Monitor Stream on: {}", mon_name);
 
-                    let mon_default = mon_device
-                        .default_output_config()
-                        .unwrap_or_else(|_| host.default_output_device().unwrap().default_output_config().unwrap());
+                    let mon_default = mon_device.default_output_config().unwrap_or_else(|_| {
+                        host.default_output_device()
+                            .unwrap()
+                            .default_output_config()
+                            .unwrap()
+                    });
 
                     let mon_fmt = mon_default.sample_format();
                     let mon_cfg: cpal::StreamConfig = mon_default.into();
@@ -1460,7 +1489,7 @@ mod tests {
 
         // Add a module - this adds to offline_chain automatically
         engine.send_command(EngineCommand::AddModule {
-            module_type: "Gain".to_string()
+            module_type: "Gain".to_string(),
         });
 
         // Get config
@@ -1474,7 +1503,10 @@ mod tests {
         let engine2 = AudioEngine::new();
         engine2.apply_persistence_config(config);
 
-        assert_eq!(*engine2.input_device_name.lock().unwrap(), Some("Test Input".to_string()));
+        assert_eq!(
+            *engine2.input_device_name.lock().unwrap(),
+            Some("Test Input".to_string())
+        );
         assert_eq!(engine2.monitoring_enabled.load(Ordering::SeqCst), true);
 
         // Apply should have added module to offline_chain

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
-use serde::{Deserialize, Serialize};
 use crate::core::traits::ModuleInfo;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// # Grid Position
@@ -60,7 +60,9 @@ mod tests {
     fn test_app_config_serialization() {
         let mut config = AppConfig::default();
         config.input_device = Some("Test Mic".to_string());
-        config.positions.insert("mod1".to_string(), GridPosition { gx: 10, gy: 20 });
+        config
+            .positions
+            .insert("mod1".to_string(), GridPosition { gx: 10, gy: 20 });
 
         let json = serde_json::to_string(&config).unwrap();
         let de_config: AppConfig = serde_json::from_str(&json).unwrap();
