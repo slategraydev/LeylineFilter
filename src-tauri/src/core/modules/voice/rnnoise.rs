@@ -69,7 +69,7 @@ impl AudioModule for RNNoiseModule {
     fn update_config(&mut self, config: &ModuleConfig) {
         if let ModuleConfig::RNNoise { enabled } = config {
             if self.enabled != *enabled {
-                log::info!("RNNoise module toggled to: {}", enabled);
+                log::info!("RNNoise module toggled to: {enabled}");
                 self.enabled = *enabled;
                 self.bypass_smoother
                     .set_target(if self.enabled { 1.0 } else { 0.0 });

@@ -272,7 +272,7 @@ async fn get_metrics(state: State<'_, AppState>) -> std::result::Result<Metrics,
     engine.process_garbage();
 
     let metrics = Metrics::from_engine(&mut engine);
-    if metrics.state_version % 100 == 0 {
+    if metrics.state_version.is_multiple_of(100) {
         log::debug!(
             "Telemetry - Buffer: {} smp, Rate: {} Hz",
             metrics.buffer_size,
@@ -387,12 +387,13 @@ pub fn run() {
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
-                .on_tray_icon_event(|tray, event| match event {
-                    TrayIconEvent::Click {
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
                         ..
-                    } => {
+                    } = event
+                    {
                         if let Some(window) = tray.app_handle().get_webview_window("main") {
                             if window.is_visible().unwrap_or(false) {
                                 window.hide().unwrap();
@@ -402,7 +403,6 @@ pub fn run() {
                             }
                         }
                     }
-                    _ => {}
                 })
                 .build(app)?;
 

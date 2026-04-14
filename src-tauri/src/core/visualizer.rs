@@ -121,13 +121,13 @@ impl VisualizerState {
         let mut waveform = [0.0f32; 64];
         let step = chunk.len() / 64;
 
-        for i in 0..64 {
+        for (i, sample) in waveform.iter_mut().enumerate() {
             let idx = i * step;
             if idx < chunk.len() {
                 // Apply Hann window to contain the wave in the center
                 // Window formula: 0.5 * (1 - cos(2 * PI * i / (N - 1)))
                 let window = 0.5 * (1.0 - (2.0 * std::f32::consts::PI * i as f32 / 63.0).cos());
-                waveform[i] = chunk[idx] * window;
+                *sample = chunk[idx] * window;
             }
         }
 

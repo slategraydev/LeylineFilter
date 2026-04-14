@@ -12,6 +12,15 @@ pub struct GridPosition {
     pub gy: i32,
 }
 
+/// # Layout Configuration
+/// Groups the grid positions and dimensions for all modules.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LayoutConfig {
+    pub positions: HashMap<String, GridPosition>,
+    pub heights: HashMap<String, u32>,
+    pub widths: HashMap<String, u32>,
+}
+
 /// # App Configuration
 /// This struct represents the full state of the application that should be persisted.
 /// It includes both the signal chain and the hardware selection.
@@ -23,9 +32,7 @@ pub struct AppConfig {
     pub engine_running: bool,
     pub modules: Vec<ModuleInfo>,
     // UI Layout Persistence
-    pub positions: HashMap<String, GridPosition>,
-    pub heights: HashMap<String, u32>,
-    pub widths: HashMap<String, u32>,
+    pub layout: LayoutConfig,
 }
 
 impl Default for AppConfig {
@@ -36,9 +43,7 @@ impl Default for AppConfig {
             monitoring_enabled: false,
             engine_running: false,
             modules: Vec::new(),
-            positions: HashMap::new(),
-            heights: HashMap::new(),
-            widths: HashMap::new(),
+            layout: LayoutConfig::default(),
         }
     }
 }
@@ -61,6 +66,7 @@ mod tests {
         let mut config = AppConfig::default();
         config.input_device = Some("Test Mic".to_string());
         config
+            .layout
             .positions
             .insert("mod1".to_string(), GridPosition { gx: 10, gy: 20 });
 
@@ -68,6 +74,6 @@ mod tests {
         let de_config: AppConfig = serde_json::from_str(&json).unwrap();
 
         assert_eq!(de_config.input_device, Some("Test Mic".to_string()));
-        assert_eq!(de_config.positions.get("mod1").unwrap().gx, 10);
+        assert_eq!(de_config.layout.positions.get("mod1").unwrap().gx, 10);
     }
 }

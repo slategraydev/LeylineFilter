@@ -46,7 +46,7 @@ impl AudioBlockProcessor {
         s.setup_resamplers();
         // Initial silence to prime the pipeline latency (1 block)
         s.output_accumulator
-            .extend(std::iter::repeat(0.0).take(block_size));
+            .extend(std::iter::repeat_n(0.0, block_size));
         s
     }
 
@@ -95,7 +95,7 @@ impl AudioBlockProcessor {
             self.resample_out_accumulator.clear();
             self.output_accumulator.clear();
             self.output_accumulator
-                .extend(std::iter::repeat(0.0).take(self.block_size));
+                .extend(std::iter::repeat_n(0.0, self.block_size));
         }
     }
 

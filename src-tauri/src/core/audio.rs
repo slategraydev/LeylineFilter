@@ -45,6 +45,8 @@ pub enum InternalEngineCommand {
 pub struct StreamWrapper(#[allow(dead_code)] cpal::Stream);
 unsafe impl Send for StreamWrapper {}
 
+pub type MetricSnapshot = (f32, f32, f32, f32, u32, [f32; 12], [f32; 12], [f32; 64], u32);
+
 /// # Lock-Free Metrics
 /// Atomic metrics allow the UI to poll the engine state without ever locking the audio thread.
 ///
@@ -61,6 +63,12 @@ pub struct EngineMetrics {
     pub tonality: [AtomicU32; 12],
     pub waveform: [AtomicU32; 64],
     pub state_version: AtomicU32,
+}
+
+impl Default for EngineMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EngineMetrics {
@@ -96,37 +104,29 @@ impl EngineMetrics {
         let db = 20.0 * level.max(1e-6).log10();
         self.input_level_db.store(db.to_bits(), Ordering::Relaxed);
 
-        for i in 0..12 {
-            self.spectrum[i].store(bins[i].to_bits(), Ordering::Relaxed);
-            self.tonality[i].store(tonality[i].to_bits(), Ordering::Relaxed);
+        for (i, &bin) in bins.iter().enumerate() {
+            self.spectrum[i].store(bin.to_bits(), Ordering::Relaxed);
         }
-        for i in 0..64 {
-            self.waveform[i].store(waveform[i].to_bits(), Ordering::Relaxed);
+        for (i, &tonal) in tonality.iter().enumerate() {
+            self.tonality[i].store(tonal.to_bits(), Ordering::Relaxed);
+        }
+        for (i, &wave) in waveform.iter().enumerate() {
+            self.waveform[i].store(wave.to_bits(), Ordering::Relaxed);
         }
     }
 
-    pub fn get(
-        &self,
-    ) -> (
-        f32,
-        f32,
-        f32,
-        f32,
-        u32,
-        [f32; 12],
-        [f32; 12],
-        [f32; 64],
-        u32,
-    ) {
+    pub fn get(&self) -> MetricSnapshot {
         let mut bins = [0.0f32; 12];
         let mut tonal = [0.0f32; 12];
         let mut wave = [0.0f32; 64];
-        for i in 0..12 {
-            bins[i] = f32::from_bits(self.spectrum[i].load(Ordering::Relaxed));
-            tonal[i] = f32::from_bits(self.tonality[i].load(Ordering::Relaxed));
+        for (i, bin) in bins.iter_mut().enumerate() {
+            *bin = f32::from_bits(self.spectrum[i].load(Ordering::Relaxed));
         }
-        for i in 0..64 {
-            wave[i] = f32::from_bits(self.waveform[i].load(Ordering::Relaxed));
+        for (i, tonal_val) in tonal.iter_mut().enumerate() {
+            *tonal_val = f32::from_bits(self.tonality[i].load(Ordering::Relaxed));
+        }
+        for (i, wave_val) in wave.iter_mut().enumerate() {
+            *wave_val = f32::from_bits(self.waveform[i].load(Ordering::Relaxed));
         }
         (
             f32::from_bits(self.latency_ms.load(Ordering::Relaxed)),
@@ -191,6 +191,12 @@ pub struct AudioEngine {
     pub positions: Arc<Mutex<HashMap<String, crate::core::persistence::GridPosition>>>,
     pub heights: Arc<Mutex<HashMap<String, u32>>>,
     pub widths: Arc<Mutex<HashMap<String, u32>>>,
+}
+
+impl Default for AudioEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AudioEngine {
@@ -265,21 +271,26 @@ impl AudioEngine {
         let mon_en = self.monitoring_enabled.load(Ordering::Relaxed);
         let running = self.is_running();
 
-        let modules = if let Ok(offline) = self.offline_chain.lock() {
-            offline
-                .get_state(
-                    running,
-                    self.buffer_size,
-                    mon_en,
-                    in_dev.clone(),
-                    out_dev.clone(),
-                    self.positions.lock().unwrap().clone(),
-                    self.heights.lock().unwrap().clone(),
-                    self.widths.lock().unwrap().clone(),
-                )
-                .modules
+        let (modules, layout) = if let Ok(offline) = self.offline_chain.lock() {
+            let current_layout = crate::core::persistence::LayoutConfig {
+                positions: self.positions.lock().unwrap().clone(),
+                heights: self.heights.lock().unwrap().clone(),
+                widths: self.widths.lock().unwrap().clone(),
+            };
+            let state = offline.get_state(
+                running,
+                self.buffer_size,
+                mon_en,
+                in_dev.clone(),
+                out_dev.clone(),
+                current_layout.clone(),
+            );
+            (state.modules, current_layout)
         } else {
-            Vec::new()
+            (
+                Vec::new(),
+                crate::core::persistence::LayoutConfig::default(),
+            )
         };
 
         crate::core::persistence::AppConfig {
@@ -288,18 +299,16 @@ impl AudioEngine {
             monitoring_enabled: mon_en,
             engine_running: running,
             modules,
-            positions: self.positions.lock().unwrap().clone(),
-            heights: self.heights.lock().unwrap().clone(),
-            widths: self.widths.lock().unwrap().clone(),
+            layout,
         }
     }
 
     pub fn apply_persistence_config(&self, config: crate::core::persistence::AppConfig) {
         *self.input_device_name.lock().unwrap() = config.input_device.clone();
         *self.output_device_name.lock().unwrap() = config.output_device.clone();
-        *self.positions.lock().unwrap() = config.positions.clone();
-        *self.heights.lock().unwrap() = config.heights.clone();
-        *self.widths.lock().unwrap() = config.widths.clone();
+        *self.positions.lock().unwrap() = config.layout.positions.clone();
+        *self.heights.lock().unwrap() = config.layout.heights.clone();
+        *self.widths.lock().unwrap() = config.layout.widths.clone();
         self.monitoring_enabled
             .store(config.monitoring_enabled, Ordering::Relaxed);
 
@@ -335,9 +344,7 @@ impl AudioEngine {
                         config.monitoring_enabled,
                         config.input_device,
                         config.output_device,
-                        config.positions,
-                        config.heights,
-                        config.widths,
+                        config.layout,
                     );
                     self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
                 }
@@ -428,27 +435,24 @@ impl AudioEngine {
 
     pub fn send_command(&self, command: EngineCommand) {
         // Track persistence in module_configs (legacy, but keeping for now)
-        match &command {
-            EngineCommand::UpdateConfig(config) => {
-                let type_name = match config {
-                    ModuleConfig::Expander { .. } => "Expander",
-                    ModuleConfig::RNNoise { .. } => "RNNoise",
-                    ModuleConfig::Gain { .. } => "Gain",
-                    ModuleConfig::Compressor { .. } => "Compressor",
-                    ModuleConfig::Filter { .. } => "Filter",
-                    ModuleConfig::ParametricEQ { .. } => "ParametricEQ",
-                    ModuleConfig::Deesser { .. } => "Deesser",
-                    ModuleConfig::Saturation { .. } => "Saturation",
-                    ModuleConfig::Limiter { .. } => "Limiter",
-                    ModuleConfig::Dereverb { .. } => "Dereverb",
-                    ModuleConfig::FX { .. } => "FX",
-                    _ => "Unknown",
-                };
-                if let Ok(mut configs) = self.module_configs.lock() {
-                    configs.insert(type_name.to_string(), config.clone());
-                }
+        if let EngineCommand::UpdateConfig(config) = &command {
+            let type_name = match config {
+                ModuleConfig::Expander { .. } => "Expander",
+                ModuleConfig::RNNoise { .. } => "RNNoise",
+                ModuleConfig::Gain { .. } => "Gain",
+                ModuleConfig::Compressor { .. } => "Compressor",
+                ModuleConfig::Filter { .. } => "Filter",
+                ModuleConfig::ParametricEQ { .. } => "ParametricEQ",
+                ModuleConfig::Deesser { .. } => "Deesser",
+                ModuleConfig::Saturation { .. } => "Saturation",
+                ModuleConfig::Limiter { .. } => "Limiter",
+                ModuleConfig::Dereverb { .. } => "Dereverb",
+                ModuleConfig::FX { .. } => "FX",
+                _ => "Unknown",
+            };
+            if let Ok(mut configs) = self.module_configs.lock() {
+                configs.insert(type_name.to_string(), config.clone());
             }
-            _ => {}
         }
 
         // Apply to offline chain (Always keep in sync)
@@ -479,18 +483,18 @@ impl AudioEngine {
                     let is_mon = self.monitoring_enabled.load(Ordering::Relaxed);
                     let in_dev = self.input_device_name.lock().unwrap().clone();
                     let out_dev = self.output_device_name.lock().unwrap().clone();
-                    let pos = self.positions.lock().unwrap().clone();
-                    let h = self.heights.lock().unwrap().clone();
-                    let w = self.widths.lock().unwrap().clone();
+                    let layout = crate::core::persistence::LayoutConfig {
+                        positions: self.positions.lock().unwrap().clone(),
+                        heights: self.heights.lock().unwrap().clone(),
+                        widths: self.widths.lock().unwrap().clone(),
+                    };
                     *state_lock = offline.get_state(
                         false,
                         self.buffer_size,
                         is_mon,
                         in_dev,
                         out_dev,
-                        pos,
-                        h,
-                        w,
+                        layout,
                     );
                     self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
                 }
@@ -506,7 +510,7 @@ impl AudioEngine {
                 {
                     Some(InternalEngineCommand::AddModule(module))
                 } else {
-                    log::warn!("Failed to create module type: {}", module_type);
+                    log::warn!("Failed to create module type: {module_type}");
                     None
                 }
             }
@@ -573,7 +577,7 @@ impl AudioEngine {
     pub fn process_garbage(&self) {
         if let Some(rx) = &self.garbage_rx {
             // Drain the channel and drop modules on this thread (Main Thread)
-            while let Ok(_) = rx.try_recv() {
+            while rx.try_recv().is_ok() {
                 // Module is dropped here
             }
         }
@@ -627,13 +631,13 @@ impl AudioEngine {
 
         // Loud diagnostics to identify if we are hitting System Default by accident
         println!("!!! [ENGINE START] !!!");
-        println!("Requested Input:   {:?}", input_device_name);
-        println!("Requested Output:  {:?}", output_device_name);
-        println!("Actual Output:     {}", actual_out);
-        println!("Primary Input:     {}", actual_in);
+        println!("Requested Input:   {input_device_name:?}");
+        println!("Requested Output:  {output_device_name:?}");
+        println!("Actual Output:     {actual_out}");
+        println!("Primary Input:     {actual_in}");
 
-        log::info!("Selected Input Device: {}", actual_in);
-        log::info!("Selected Output Device: {}", actual_out);
+        log::info!("Selected Input Device: {actual_in}");
+        log::info!("Selected Output Device: {actual_out}");
 
         // Update tracked device names for persistence
         *self.input_device_name.lock().unwrap() = input_device_name.clone();
@@ -652,9 +656,7 @@ impl AudioEngine {
                 .0
                 .min(default_rate.0)
                 .max(supported.min_sample_rate().0);
-            supported
-                .clone()
-                .with_sample_rate(cpal::SampleRate(clamped))
+            (*supported).with_sample_rate(cpal::SampleRate(clamped))
         };
 
         let in_default_rate = input_default.sample_rate();
@@ -664,9 +666,8 @@ impl AudioEngine {
             input_default
         } else {
             match input_device.supported_input_configs() {
-                Ok(cfgs) => cfgs
-                    .filter(|c| c.sample_format() == cpal::SampleFormat::F32)
-                    .next()
+                Ok(mut cfgs) => cfgs
+                    .find(|c| c.sample_format() == cpal::SampleFormat::F32)
                     .map(|c| find_f32_config(&c, in_default_rate))
                     .unwrap_or_else(|| {
                         log::warn!(
@@ -684,9 +685,8 @@ impl AudioEngine {
             output_default
         } else {
             match output_device.supported_output_configs() {
-                Ok(cfgs) => cfgs
-                    .filter(|c| c.sample_format() == cpal::SampleFormat::F32)
-                    .next()
+                Ok(mut cfgs) => cfgs
+                    .find(|c| c.sample_format() == cpal::SampleFormat::F32)
                     .map(|c| find_f32_config(&c, out_default_rate))
                     .unwrap_or_else(|| {
                         log::warn!(
@@ -703,8 +703,8 @@ impl AudioEngine {
         let in_sample_format = input_config_supported.sample_format();
         let out_sample_format = output_config_supported.sample_format();
 
-        log::info!("Final Input Format: {:?}", in_sample_format);
-        log::info!("Final Output Format: {:?}", out_sample_format);
+        log::info!("Final Input Format: {in_sample_format:?}");
+        log::info!("Final Output Format: {out_sample_format:?}");
 
         let mut input_config: cpal::StreamConfig = input_config_supported.into();
         let mut output_config: cpal::StreamConfig = output_config_supported.into();
@@ -713,8 +713,8 @@ impl AudioEngine {
         input_config.buffer_size = cpal::BufferSize::Default;
         output_config.buffer_size = cpal::BufferSize::Default;
 
-        log::info!("Input Config: {:?}", input_config);
-        log::info!("Output Config: {:?}", output_config);
+        log::info!("Input Config: {input_config:?}");
+        log::info!("Output Config: {output_config:?}");
 
         let in_sample_rate = input_config.sample_rate.0 as f64;
         let out_sample_rate = output_config.sample_rate.0 as f64;
@@ -735,12 +735,14 @@ impl AudioEngine {
             let is_mon = self.monitoring_enabled.load(Ordering::Relaxed);
             let in_dev = self.input_device_name.lock().unwrap().clone();
             let out_dev = self.output_device_name.lock().unwrap().clone();
-            let pos = self.positions.lock().unwrap().clone();
-            let h = self.heights.lock().unwrap().clone();
-            let w = self.widths.lock().unwrap().clone();
+            let layout = crate::core::persistence::LayoutConfig {
+                positions: self.positions.lock().unwrap().clone(),
+                heights: self.heights.lock().unwrap().clone(),
+                widths: self.widths.lock().unwrap().clone(),
+            };
 
             for m_info in offline
-                .get_state(false, 0, is_mon, in_dev, out_dev, pos, h, w)
+                .get_state(false, 0, is_mon, in_dev, out_dev, layout)
                 .modules
             {
                 // Use the module's name and original ID to re-create it
@@ -796,18 +798,18 @@ impl AudioEngine {
 
         if let Ok(mut state_lock) = self.chain_state.lock() {
             let is_mon = monitoring_enabled_flag.load(Ordering::Relaxed);
-            let pos = self.positions.lock().unwrap().clone();
-            let h = self.heights.lock().unwrap().clone();
-            let w = self.widths.lock().unwrap().clone();
+            let layout = crate::core::persistence::LayoutConfig {
+                positions: self.positions.lock().unwrap().clone(),
+                heights: self.heights.lock().unwrap().clone(),
+                widths: self.widths.lock().unwrap().clone(),
+            };
             *state_lock = chain.get_state(
                 true,
                 0,
                 is_mon,
                 input_device_name.clone(),
                 output_device_name.clone(),
-                pos,
-                h,
-                w,
+                layout,
             ); // Start with 0, will be updated by callback
             state_lock.monitoring_enabled = is_mon;
             self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
@@ -969,15 +971,18 @@ impl AudioEngine {
                     if let Ok(mut state_lock) = chain_state_clone.try_lock() {
                         let current_buf = metrics.buffer_size.load(Ordering::Relaxed);
                         let is_mon = monitoring_enabled_flag_for_cb.load(Ordering::Relaxed);
+                        let layout = crate::core::persistence::LayoutConfig {
+                            positions: pos_captured.lock().unwrap().clone(),
+                            heights: h_captured.lock().unwrap().clone(),
+                            widths: w_captured.lock().unwrap().clone(),
+                        };
                         *state_lock = chain.get_state(
                             true,
                             current_buf,
                             is_mon,
                             in_dev_captured.clone(),
                             out_dev_captured.clone(),
-                            pos_captured.lock().unwrap().clone(),
-                            h_captured.lock().unwrap().clone(),
-                            w_captured.lock().unwrap().clone(),
+                            layout,
                         );
                         state_lock.monitoring_enabled = is_mon;
                         metrics.state_version.fetch_add(1, Ordering::Relaxed);
@@ -1070,7 +1075,7 @@ impl AudioEngine {
                     }
                     run_input_processing(data, in_channels);
                 },
-                |err| log::error!("Input stream error: {}", err),
+                |err| log::error!("Input stream error: {err}"),
                 None,
             )?,
             cpal::SampleFormat::I16 => {
@@ -1092,7 +1097,7 @@ impl AudioEngine {
                         conv_buf.extend(data.iter().map(|&s| s as f32 / i16::MAX as f32));
                         run_input_processing(&conv_buf, in_channels);
                     },
-                    |err| log::error!("Input stream error: {}", err),
+                    |err| log::error!("Input stream error: {err}"),
                     None,
                 )?
             }
@@ -1114,7 +1119,7 @@ impl AudioEngine {
                         conv_buf.extend(data.iter().map(|&s| s as f32 / i32::MAX as f32));
                         run_input_processing(&conv_buf, in_channels);
                     },
-                    |err| log::error!("Input stream error: {}", err),
+                    |err| log::error!("Input stream error: {err}"),
                     None,
                 )?
             }
@@ -1171,7 +1176,7 @@ impl AudioEngine {
                     }
                     rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
                 },
-                |err| log::error!("Output stream error: {}", err),
+                |err| log::error!("Output stream error: {err}"),
                 None,
             )?,
             cpal::SampleFormat::I16 => {
@@ -1209,7 +1214,7 @@ impl AudioEngine {
                         }
                         rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
                     },
-                    |err| log::error!("Output stream error: {}", err),
+                    |err| log::error!("Output stream error: {err}"),
                     None,
                 )?
             }
@@ -1248,7 +1253,7 @@ impl AudioEngine {
                         }
                         rb_occ_out.store(consumer.occupied_len(), Ordering::Relaxed);
                     },
-                    |err| log::error!("Output stream error: {}", err),
+                    |err| log::error!("Output stream error: {err}"),
                     None,
                 )?
             }
@@ -1286,7 +1291,7 @@ impl AudioEngine {
 
                 if let Some(mon_device) = mon_device_opt {
                     let mon_name = mon_device.name().unwrap_or_else(|_| "Unknown".to_string());
-                    log::info!("Opening Automatic Monitor Stream on: {}", mon_name);
+                    log::info!("Opening Automatic Monitor Stream on: {mon_name}");
 
                     let mon_default = mon_device.default_output_config().unwrap_or_else(|_| {
                         host.default_output_device()
@@ -1312,7 +1317,7 @@ impl AudioEngine {
                                         }
                                     }
                                 },
-                                |err| log::error!("Monitor stream error: {}", err),
+                                |err| log::error!("Monitor stream error: {err}"),
                                 None,
                             )
                             .ok(),
@@ -1329,7 +1334,7 @@ impl AudioEngine {
                                         }
                                     }
                                 },
-                                |err| log::error!("Monitor stream error: {}", err),
+                                |err| log::error!("Monitor stream error: {err}"),
                                 None,
                             )
                             .ok(),
@@ -1346,7 +1351,7 @@ impl AudioEngine {
                                         }
                                     }
                                 },
-                                |err| log::error!("Monitor stream error: {}", err),
+                                |err| log::error!("Monitor stream error: {err}"),
                                 None,
                             )
                             .ok(),

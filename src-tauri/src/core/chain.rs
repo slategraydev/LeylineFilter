@@ -92,7 +92,7 @@ impl SignalChain {
     pub fn update_module_param(&mut self, id: &str, _param: &str, _value: f32) {
         // This might require adding a `set_param` method to the `AudioModule` trait
         // For now, we'll skip this or implement it if we update the trait.
-        log::warn!("set_param not yet implemented for module {}", id);
+        log::warn!("set_param not yet implemented for module {id}");
     }
 
     pub fn modules(&self) -> &Vec<Box<dyn AudioModule>> {
@@ -110,9 +110,7 @@ impl SignalChain {
         monitoring_enabled: bool,
         input_device: Option<String>,
         output_device: Option<String>,
-        positions: std::collections::HashMap<String, crate::core::persistence::GridPosition>,
-        heights: std::collections::HashMap<String, u32>,
-        widths: std::collections::HashMap<String, u32>,
+        layout: crate::core::persistence::LayoutConfig,
     ) -> EngineState {
         let modules: Vec<ModuleInfo> = self
             .modules
@@ -134,9 +132,9 @@ impl SignalChain {
             buffer_size,
             input_device,
             output_device,
-            positions,
-            heights,
-            widths,
+            positions: layout.positions,
+            heights: layout.heights,
+            widths: layout.widths,
         }
     }
 }
