@@ -25,7 +25,9 @@ export function LevelMeter({ db, label }: LevelMeterProps) {
     if (db > peakRef.current) {
       peakRef.current = db;
       lastPeakTimeRef.current = Date.now();
-      setDisplayPeak(db);
+      setTimeout(() => {
+        setDisplayPeak(db);
+      }, 0);
     }
   }, [db]);
 

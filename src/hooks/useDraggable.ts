@@ -42,7 +42,9 @@ export function useDraggable(
 
   useEffect(() => {
     if (!isDragging) {
-      setDragOffset({ x: 0, y: 0 });
+      setTimeout(() => {
+        setDragOffset({ x: 0, y: 0 });
+      }, 0);
       currentGridPos.current = initialGridPosition;
     }
   }, [initialGridPosition, isDragging]);

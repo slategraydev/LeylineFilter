@@ -118,9 +118,11 @@ function App() {
   useEffect(() => {
     if (engineState && Object.keys(engineState.positions || {}).length > 0) {
       console.log('Restoring layout from engine state...');
-      setPositions(engineState.positions);
-      setModuleHeights(engineState.heights || {});
-      setModuleWidths(engineState.widths || {});
+      setTimeout(() => {
+        setPositions(engineState.positions);
+        setModuleHeights(engineState.heights || {});
+        setModuleWidths(engineState.widths || {});
+      }, 0);
     }
   }, [engineState]); // Run when engineState arrives or changes
 
@@ -166,37 +168,39 @@ function App() {
   useEffect(() => {
     if (!engineState) return;
 
-    setPositions((prev) => {
-      let changed = false;
-      const addedIds: string[] = [];
-      const next = { ...prev };
+    setTimeout(() => {
+      setPositions((prev) => {
+        let changed = false;
+        const addedIds: string[] = [];
+        const next = { ...prev };
 
-      const currentIds = new Set((engineState.modules || []).map((m) => m.id));
-      Object.keys(next).forEach((id) => {
-        if (!currentIds.has(id)) {
-          delete next[id];
-          changed = true;
+        const currentIds = new Set((engineState.modules || []).map((m) => m.id));
+        Object.keys(next).forEach((id) => {
+          if (!currentIds.has(id)) {
+            delete next[id];
+            changed = true;
+          }
+        });
+
+        engineState.modules?.forEach((m) => {
+          if (!next[m.id]) {
+            const nextSlot = findNextAvailableSlot(next, m.config.type);
+            next[m.id] = nextSlot;
+            addedIds.push(m.id);
+            changed = true;
+          }
+        });
+
+        if (changed) {
+          localStorage.setItem('module_positions_grid', JSON.stringify(next));
+          if (addedIds.length > 0) {
+            setNewlyAddedModuleIds((prevIds) => [...prevIds, ...addedIds]);
+          }
+          return next;
         }
+        return prev;
       });
-
-      engineState.modules?.forEach((m) => {
-        if (!next[m.id]) {
-          const nextSlot = findNextAvailableSlot(next, m.config.type);
-          next[m.id] = nextSlot;
-          addedIds.push(m.id);
-          changed = true;
-        }
-      });
-
-      if (changed) {
-        localStorage.setItem('module_positions_grid', JSON.stringify(next));
-        if (addedIds.length > 0) {
-          setNewlyAddedModuleIds((prevIds) => [...prevIds, ...addedIds]);
-        }
-        return next;
-      }
-      return prev;
-    });
+    }, 0);
   }, [engineState?.modules, findNextAvailableSlot, engineState]);
 
   // Handle flash animation side-effects
