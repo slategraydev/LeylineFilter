@@ -164,14 +164,7 @@ mod tests {
         assert_eq!(chain.modules()[1].id(), id1);
 
         // State
-        let state = chain.get_state(
-            true,
-            256,
-            true,
-            None,
-            None,
-            LayoutConfig::default(),
-        );
+        let state = chain.get_state(true, 256, true, None, None, LayoutConfig::default());
         assert_eq!(state.modules.len(), 2);
         assert!(state.is_running);
         assert_eq!(state.buffer_size, 256);

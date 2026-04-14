@@ -45,7 +45,17 @@ pub enum InternalEngineCommand {
 pub struct StreamWrapper(#[allow(dead_code)] cpal::Stream);
 unsafe impl Send for StreamWrapper {}
 
-pub type MetricSnapshot = (f32, f32, f32, f32, u32, [f32; 12], [f32; 12], [f32; 64], u32);
+pub type MetricSnapshot = (
+    f32,
+    f32,
+    f32,
+    f32,
+    u32,
+    [f32; 12],
+    [f32; 12],
+    [f32; 64],
+    u32,
+);
 
 /// # Lock-Free Metrics
 /// Atomic metrics allow the UI to poll the engine state without ever locking the audio thread.
@@ -488,14 +498,8 @@ impl AudioEngine {
                         heights: self.heights.lock().unwrap().clone(),
                         widths: self.widths.lock().unwrap().clone(),
                     };
-                    *state_lock = offline.get_state(
-                        false,
-                        self.buffer_size,
-                        is_mon,
-                        in_dev,
-                        out_dev,
-                        layout,
-                    );
+                    *state_lock =
+                        offline.get_state(false, self.buffer_size, is_mon, in_dev, out_dev, layout);
                     self.metrics.state_version.fetch_add(1, Ordering::Relaxed);
                 }
             }
