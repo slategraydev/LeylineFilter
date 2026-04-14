@@ -1,10 +1,10 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
-import React, { useLayoutEffect, useRef } from "react";
-import { useDraggable } from "../../hooks/useDraggable";
-import { GridPosition } from "../../types";
-import { GRID_UNIT_PX } from "../../constants";
-import "./BaseModule.css";
+import React, { useLayoutEffect, useRef } from 'react';
+import { useDraggable } from '../../hooks/useDraggable';
+import { GridPosition } from '../../types';
+import { GRID_UNIT_PX } from '../../constants';
+import './BaseModule.css';
 
 interface BaseModuleProps {
   id: string;
@@ -81,7 +81,7 @@ export function BaseModule({
     if (!isResizing) return;
 
     const handlePointerMove = (e: PointerEvent) => {
-      const gridInner = document.querySelector(".grid-inner") as HTMLElement;
+      const gridInner = document.querySelector('.grid-inner') as HTMLElement;
       if (!gridInner) return;
 
       const rect = gridInner.getBoundingClientRect();
@@ -91,14 +91,8 @@ export function BaseModule({
       const mouseXLocal = (e.clientX - rect.left) / gridUnit;
       const mouseYLocal = (e.clientY - rect.top) / gridUnit;
 
-      const newWidthUnits = Math.max(
-        10,
-        Math.round(mouseXLocal - initialPosition.gx),
-      );
-      const newHeightUnits = Math.max(
-        4,
-        Math.round(mouseYLocal - initialPosition.gy),
-      );
+      const newWidthUnits = Math.max(10, Math.round(mouseXLocal - initialPosition.gx));
+      const newHeightUnits = Math.max(4, Math.round(mouseYLocal - initialPosition.gy));
 
       if (onWidthReport && newWidthUnits !== widthUnits) {
         onWidthReport(id, newWidthUnits);
@@ -112,21 +106,13 @@ export function BaseModule({
       setIsResizing(false);
     };
 
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
     return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [
-    isResizing,
-    id,
-    initialPosition,
-    widthUnits,
-    heightUnits,
-    onWidthReport,
-    onHeightReport,
-  ]);
+  }, [isResizing, id, initialPosition, widthUnits, heightUnits, onWidthReport, onHeightReport]);
 
   const moduleRef = useRef<HTMLDivElement>(null);
 
@@ -135,33 +121,24 @@ export function BaseModule({
     if (!moduleRef.current || !onHeightReport || isResizing) return;
 
     const measure = () => {
-      const content = moduleRef.current?.querySelector(
-        ".module-content",
-      ) as HTMLElement;
+      const content = moduleRef.current?.querySelector('.module-content') as HTMLElement;
       if (content) {
-        const gridUnit = GRID_UNIT_PX;
-
-        const children = Array.from(content.children) as HTMLElement[];
-        const visibleChildren = children.filter((child) => {
+        const visibleChildren = (Array.from(content.children) as HTMLElement[]).filter((child) => {
           const style = window.getComputedStyle(child);
           return (
-            style.display !== "none" &&
-            style.visibility !== "hidden" &&
-            child.offsetHeight > 0
+            style.display !== 'none' && style.visibility !== 'hidden' && child.offsetHeight > 0
           );
         });
 
-        let naturalContentHeight = 0;
-        if (visibleChildren.length > 0) {
-          const lastChild = visibleChildren[visibleChildren.length - 1];
-          naturalContentHeight =
-            lastChild.offsetTop + lastChild.offsetHeight + gridUnit;
-        } else {
-          naturalContentHeight = gridUnit * 2;
-        }
-        const headerHeight = gridUnit * 4;
+        const lastChild = visibleChildren[visibleChildren.length - 1];
+        const naturalContentHeight =
+          visibleChildren.length > 0
+            ? lastChild.offsetTop + lastChild.offsetHeight + GRID_UNIT_PX
+            : GRID_UNIT_PX * 2;
+
+        const headerHeight = GRID_UNIT_PX * 4;
         const totalHeight = headerHeight + naturalContentHeight;
-        const units = Math.ceil(totalHeight / gridUnit);
+        const units = Math.ceil(totalHeight / GRID_UNIT_PX);
         if (units !== heightUnits) {
           onHeightReport(id, units);
         }
@@ -169,7 +146,7 @@ export function BaseModule({
     };
 
     const observer = new ResizeObserver(measure);
-    const content = moduleRef.current.querySelector(".module-content");
+    const content = moduleRef.current.querySelector('.module-content');
     if (content) {
       observer.observe(content);
       Array.from(content.children).forEach((child) => observer.observe(child));
@@ -186,24 +163,24 @@ export function BaseModule({
   const displayY = isDragging ? snappedY : initialPosition.gy;
 
   const combinedStyle: React.CSSProperties = {
-    position: "absolute",
+    position: 'absolute',
     left: `calc(var(--grid-unit) * ${displayX})`,
     top: `calc(var(--grid-unit) * ${displayY})`,
     width: `calc(var(--grid-unit) * ${widthUnits})`,
     height: `calc(var(--grid-unit) * ${heightUnits})`,
-    boxSizing: "border-box",
+    boxSizing: 'border-box',
     zIndex: isDragging || isResizing ? 1000 : 1,
     transition:
       isDragging || isResizing
-        ? "none"
-        : "left 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), top 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)",
+        ? 'none'
+        : 'left 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), top 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)',
     ...style,
   };
 
   return (
     <div
       ref={moduleRef}
-      className={`module-card ${enabled ? "active" : "inactive"} ${isDragging ? "dragging" : ""} ${isNewlyPlaced ? "newly-placed" : ""} ${isResizing ? "resizing" : ""}`}
+      className={`module-card ${enabled ? 'active' : 'inactive'} ${isDragging ? 'dragging' : ''} ${isNewlyPlaced ? 'newly-placed' : ''} ${isResizing ? 'resizing' : ''}`}
       style={combinedStyle}
       data-dragging={isDragging}
       onContextMenu={(e) => {
@@ -221,11 +198,7 @@ export function BaseModule({
         }
       }}
     >
-      <div
-        className="module-header"
-        onPointerDown={onPointerDown}
-        style={{ cursor: "grab" }}
-      >
+      <div className="module-header" onPointerDown={onPointerDown} style={{ cursor: 'grab' }}>
         <div className="header-left" onPointerDown={(e) => e.stopPropagation()}>
           {!hideToggle && (
             <label className="switch">
@@ -243,16 +216,9 @@ export function BaseModule({
           <h3>{title}</h3>
         </div>
 
-        <div
-          className="header-right"
-          onPointerDown={(e) => e.stopPropagation()}
-        >
+        <div className="header-right" onPointerDown={(e) => e.stopPropagation()}>
           {onRemove && (
-            <button
-              className="remove-module-btn"
-              onClick={onRemove}
-              aria-label="Remove Module"
-            >
+            <button className="remove-module-btn" onClick={onRemove} aria-label="Remove Module">
               <svg viewBox="0 0 24 24" width="24" height="24">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />

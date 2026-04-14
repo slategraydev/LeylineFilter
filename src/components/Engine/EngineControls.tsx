@@ -1,4 +1,4 @@
-import "./EngineControls.css";
+import './EngineControls.css';
 
 interface EngineControlsProps {
   isRunning: boolean;
@@ -28,10 +28,7 @@ export function EngineControls({
         <div className="selector">
           <label>
             Input
-            <select
-              value={selectedInput}
-              onChange={(e) => onInputChange(e.target.value)}
-            >
+            <select value={selectedInput} onChange={(e) => onInputChange(e.target.value)}>
               {inputDevices.map((d) => (
                 <option key={d} value={d}>
                   {d}
@@ -43,10 +40,7 @@ export function EngineControls({
         <div className="selector">
           <label>
             Output
-            <select
-              value={selectedOutput}
-              onChange={(e) => onOutputChange(e.target.value)}
-            >
+            <select value={selectedOutput} onChange={(e) => onOutputChange(e.target.value)}>
               {outputDevices.map((d) => (
                 <option key={d} value={d}>
                   {d}
@@ -60,7 +54,7 @@ export function EngineControls({
       <div className="monitoring-toggle">
         <label className="checkbox-container monitor-label">
           Monitor
-          <div style={{ display: "flex", alignItems: "center" }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
             <input
               type="checkbox"
               checked={isMonitoring}

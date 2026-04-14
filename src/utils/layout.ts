@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
-import { GridPosition } from "../types";
-import { GAP_UNITS, MODULE_W_UNITS } from "../constants";
+import { GridPosition } from '../types';
+import { GAP_UNITS, MODULE_W_UNITS } from '../constants';
 
 /**
  * # Layout Resolver
@@ -34,11 +34,9 @@ export const findFreeSlot = (
         const otherW = getW(id);
 
         const hOverlap =
-          gx < otherPos.gx + otherW + GAP_UNITS &&
-          gx + MODULE_W_UNITS + GAP_UNITS > otherPos.gx;
+          gx < otherPos.gx + otherW + GAP_UNITS && gx + MODULE_W_UNITS + GAP_UNITS > otherPos.gx;
         const vOverlap =
-          gy < otherPos.gy + otherH + GAP_UNITS &&
-          gy + moduleH + GAP_UNITS > otherPos.gy;
+          gy < otherPos.gy + otherH + GAP_UNITS && gy + moduleH + GAP_UNITS > otherPos.gy;
         return hOverlap && vOverlap;
       });
 

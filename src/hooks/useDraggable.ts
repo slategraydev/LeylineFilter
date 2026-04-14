@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
-import { useState, useCallback, useEffect, useRef } from "react";
-import { GRID_UNIT_PX } from "../constants";
-import { GridPosition } from "../types";
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { GRID_UNIT_PX } from '../constants';
+import { GridPosition } from '../types';
 
 /**
  * # useDraggable Hook
@@ -42,7 +42,9 @@ export function useDraggable(
 
   useEffect(() => {
     if (!isDragging) {
-      setDragOffset({ x: 0, y: 0 });
+      setTimeout(() => {
+        setDragOffset({ x: 0, y: 0 });
+      }, 0);
       currentGridPos.current = initialGridPosition;
     }
   }, [initialGridPosition, isDragging]);
@@ -53,18 +55,18 @@ export function useDraggable(
 
       const target = e.target as HTMLElement;
       if (
-        target.tagName === "BUTTON" ||
-        target.tagName === "INPUT" ||
-        target.tagName === "SELECT" ||
-        target.closest(".switch") ||
-        target.closest(".slider") ||
-        target.closest(".custom-select")
+        target.tagName === 'BUTTON' ||
+        target.tagName === 'INPUT' ||
+        target.tagName === 'SELECT' ||
+        target.closest('.switch') ||
+        target.closest('.slider') ||
+        target.closest('.custom-select')
       ) {
         return;
       }
 
       // Find the grid origin (grid-inner) to calculate local coordinates
-      const gridInner = target.closest(".grid-inner");
+      const gridInner = target.closest('.grid-inner');
       if (!gridInner) return;
 
       setIsDragging(true);
@@ -77,9 +79,8 @@ export function useDraggable(
 
       const rect = gridInner.getBoundingClientRect();
       const gridUnit =
-        parseFloat(
-          (gridInner as HTMLElement).style.getPropertyValue("--grid-unit"),
-        ) || GRID_UNIT_PX;
+        parseFloat((gridInner as HTMLElement).style.getPropertyValue('--grid-unit')) ||
+        GRID_UNIT_PX;
 
       // Calculate where on the module we clicked in logical grid units
       const mouseXLocal = (e.clientX - rect.left) / gridUnit;
@@ -93,7 +94,7 @@ export function useDraggable(
       if (onDragStart) onDragStart();
       e.preventDefault();
     },
-    [initialGridPosition],
+    [initialGridPosition, onDragStart],
   );
 
   useEffect(() => {
@@ -102,21 +103,17 @@ export function useDraggable(
     const handlePointerMove = (e: PointerEvent) => {
       const moduleElement =
         document.querySelector(`[data-dragging="true"]`) ||
-        (e.target as HTMLElement).closest(".module-card");
-      const gridInner = moduleElement?.closest(".grid-inner") as HTMLElement;
+        (e.target as HTMLElement).closest('.module-card');
+      const gridInner = moduleElement?.closest('.grid-inner') as HTMLElement;
       if (!gridInner) return;
 
       const rect = gridInner.getBoundingClientRect();
-      const gridUnit =
-        parseFloat(gridInner.style.getPropertyValue("--grid-unit")) ||
-        GRID_UNIT_PX;
+      const gridUnit = parseFloat(gridInner.style.getPropertyValue('--grid-unit')) || GRID_UNIT_PX;
 
       // Calculate where the module top-left should be in PIXELS relative to the grid origin
       // so that the grab point (in pixels) stays under the current mouse position.
-      const targetXPixel =
-        e.clientX - rect.left - grabPointLocal.current.x * gridUnit;
-      const targetYPixel =
-        e.clientY - rect.top - grabPointLocal.current.y * gridUnit;
+      const targetXPixel = e.clientX - rect.left - grabPointLocal.current.x * gridUnit;
+      const targetYPixel = e.clientY - rect.top - grabPointLocal.current.y * gridUnit;
 
       const startXPixel = startGridPos.current.gx * gridUnit;
       const startYPixel = startGridPos.current.gy * gridUnit;
@@ -142,10 +139,7 @@ export function useDraggable(
 
       if (onDrag) onDrag(newPos, nextOffset, continuousPos);
 
-      if (
-        newPos.gx !== currentGridPos.current.gx ||
-        newPos.gy !== currentGridPos.current.gy
-      ) {
+      if (newPos.gx !== currentGridPos.current.gx || newPos.gy !== currentGridPos.current.gy) {
         currentGridPos.current = newPos;
       }
     };
@@ -157,14 +151,14 @@ export function useDraggable(
       }
     };
 
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
 
     return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [isDragging, onDrag, onDragEnd]);
 

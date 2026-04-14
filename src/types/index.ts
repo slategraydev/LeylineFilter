@@ -27,14 +27,14 @@ export interface CompressorConfig {
 
 export interface FilterConfig {
   enabled: boolean;
-  filter_type: "HPF" | "LPF" | "BPF" | "Notch";
+  filter_type: 'HPF' | 'LPF' | 'BPF' | 'Notch';
   frequency: number;
   q: number;
 }
 
 export interface EQBandConfig {
   enabled: boolean;
-  filter_type: "LowShelf" | "HighShelf" | "Peaking";
+  filter_type: 'LowShelf' | 'HighShelf' | 'Peaking';
   frequency: number;
   q: number;
   gain_db: number;
@@ -47,7 +47,7 @@ export interface ParametricEQConfig {
 
 export interface FXConfig {
   enabled: boolean;
-  fx_type: "Reverb" | "Delay" | "Chorus" | "Flanger";
+  fx_type: 'Reverb' | 'Delay' | 'Chorus' | 'Flanger';
   mix: number;
   params: Record<string, number>;
 }
@@ -95,7 +95,7 @@ export interface EngineMetrics {
 export interface ModuleInfo {
   id: string;
   name: string;
-  category: "Dynamics" | "Filter" | "Voice" | "FX" | "Synth" | "Utility";
+  category: 'Dynamics' | 'Filter' | 'Voice' | 'FX' | 'Synth' | 'Utility';
   enabled: boolean;
   config: ModuleConfig;
 }
@@ -119,15 +119,15 @@ export interface EngineState {
 }
 
 export type ModuleConfig =
-  | { type: "Expander"; data: ExpanderConfig }
-  | { type: "RNNoise"; data: RNNoiseConfig }
-  | { type: "Gain"; data: GainConfig }
-  | { type: "Compressor"; data: CompressorConfig }
-  | { type: "Filter"; data: FilterConfig }
-  | { type: "ParametricEQ"; data: ParametricEQConfig }
-  | { type: "Deesser"; data: DeesserConfig }
-  | { type: "Saturation"; data: SaturationConfig }
-  | { type: "Limiter"; data: LimiterConfig }
-  | { type: "Dereverb"; data: DereverbConfig }
-  | { type: "FX"; data: FXConfig }
-  | { type: "None"; data: null };
+  | { type: 'Expander'; data: ExpanderConfig }
+  | { type: 'RNNoise'; data: RNNoiseConfig }
+  | { type: 'Gain'; data: GainConfig }
+  | { type: 'Compressor'; data: CompressorConfig }
+  | { type: 'Filter'; data: FilterConfig }
+  | { type: 'ParametricEQ'; data: ParametricEQConfig }
+  | { type: 'Deesser'; data: DeesserConfig }
+  | { type: 'Saturation'; data: SaturationConfig }
+  | { type: 'Limiter'; data: LimiterConfig }
+  | { type: 'Dereverb'; data: DereverbConfig }
+  | { type: 'FX'; data: FXConfig }
+  | { type: 'None'; data: null };

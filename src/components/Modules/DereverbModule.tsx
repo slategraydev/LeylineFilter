@@ -1,6 +1,6 @@
-import React from "react";
-import { BaseModule } from "./BaseModule";
-import { DereverbConfig, GridPosition } from "../../types";
+import React from 'react';
+import { BaseModule } from './BaseModule';
+import { DereverbConfig, GridPosition } from '../../types';
 
 interface DereverbModuleProps {
   id: string;
@@ -55,9 +55,7 @@ export const DereverbModule: React.FC<DereverbModuleProps> = ({
       onRemove={onRemove}
       isNewlyPlaced={isNewlyPlaced}
     >
-      <p className="module-description">
-        Removes room resonance and tightens vocal transients.
-      </p>
+      <p className="module-description">Removes room resonance and tightens vocal transients.</p>
       <div className="control-group">
         <label>
           Reduction <span>{Math.round(config.reduction * 100)}%</span>
@@ -68,9 +66,7 @@ export const DereverbModule: React.FC<DereverbModuleProps> = ({
             step="0.01"
             value={config.reduction}
             disabled={!config.enabled}
-            onChange={(e) =>
-              onUpdate({ ...config, reduction: parseFloat(e.target.value) })
-            }
+            onChange={(e) => onUpdate({ ...config, reduction: parseFloat(e.target.value) })}
           />
         </label>
       </div>
@@ -85,9 +81,7 @@ export const DereverbModule: React.FC<DereverbModuleProps> = ({
             step="0.01"
             value={config.sensitivity}
             disabled={!config.enabled}
-            onChange={(e) =>
-              onUpdate({ ...config, sensitivity: parseFloat(e.target.value) })
-            }
+            onChange={(e) => onUpdate({ ...config, sensitivity: parseFloat(e.target.value) })}
           />
         </label>
       </div>

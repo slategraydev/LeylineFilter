@@ -1,22 +1,22 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
-import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { useEngine } from "./hooks/useEngine";
-import { ExpanderModule } from "./components/Modules/ExpanderModule";
-import { RNNoiseModule } from "./components/Modules/RNNoiseModule";
-import { GainModule } from "./components/Modules/GainModule";
-import { FilterModule } from "./components/Modules/FilterModule";
-import { CompressorModule } from "./components/Modules/CompressorModule";
-import { DeesserModule } from "./components/Modules/DeesserModule";
-import { SaturationModule } from "./components/Modules/SaturationModule";
-import { LimiterModule } from "./components/Modules/LimiterModule";
-import { DereverbModule } from "./components/Modules/DereverbModule";
-import { ParametricEQModule } from "./components/Modules/ParametricEQModule";
-import { AddModuleMenu } from "./components/Engine/AddModuleMenu";
-import { EngineControls } from "./components/Engine/EngineControls";
-import { Oscilloscope } from "./components/Sidebar/Oscilloscope";
-import { Visualizer } from "./components/Visualizer/Visualizer";
+import { useState, useEffect, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { useEngine } from './hooks/useEngine';
+import { ExpanderModule } from './components/Modules/ExpanderModule';
+import { RNNoiseModule } from './components/Modules/RNNoiseModule';
+import { GainModule } from './components/Modules/GainModule';
+import { FilterModule } from './components/Modules/FilterModule';
+import { CompressorModule } from './components/Modules/CompressorModule';
+import { DeesserModule } from './components/Modules/DeesserModule';
+import { SaturationModule } from './components/Modules/SaturationModule';
+import { LimiterModule } from './components/Modules/LimiterModule';
+import { DereverbModule } from './components/Modules/DereverbModule';
+import { ParametricEQModule } from './components/Modules/ParametricEQModule';
+import { AddModuleMenu } from './components/Engine/AddModuleMenu';
+import { EngineControls } from './components/Engine/EngineControls';
+import { Oscilloscope } from './components/Sidebar/Oscilloscope';
+import { Visualizer } from './components/Visualizer/Visualizer';
 import {
   ExpanderConfig,
   RNNoiseConfig,
@@ -30,16 +30,16 @@ import {
   DereverbConfig,
   ModuleConfig,
   GridPosition,
-} from "./types";
-import { findFreeSlot } from "./utils/layout";
+} from './types';
+import { findFreeSlot } from './utils/layout';
 import {
   GRID_UNIT_PX,
   SIDEBAR_WIDTH_PX,
   MODULE_W_UNITS,
   MODULE_H_UNITS,
   MODULE_HEIGHTS,
-} from "./constants";
-import "./App.css";
+} from './constants';
+import './App.css';
 
 /**
  * # Main Application Component
@@ -70,100 +70,92 @@ function App() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingPos, setDraggingPos] = useState<GridPosition | null>(null);
 
-  const [positions, setPositions] = useState<Record<string, GridPosition>>(
-    () => {
-      const saved = localStorage.getItem("module_positions_grid");
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error("Failed to parse module positions", e);
-        }
+  const [positions, setPositions] = useState<Record<string, GridPosition>>(() => {
+    const saved = localStorage.getItem('module_positions_grid');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (err) {
+        console.error('Failed to parse module positions', err);
       }
-      return {};
-    },
-  );
+    }
+    return {};
+  });
 
-  const [moduleHeights, setModuleHeights] = useState<Record<string, number>>(
-    () => {
-      const saved = localStorage.getItem("module_heights_grid");
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error("Failed to parse module heights", e);
-        }
+  const [moduleHeights, setModuleHeights] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem('module_heights_grid');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (err) {
+        console.error('Failed to parse module heights', err);
       }
-      return {};
-    },
-  );
+    }
+    return {};
+  });
 
-  const [moduleWidths, setModuleWidths] = useState<Record<string, number>>(
-    () => {
-      const saved = localStorage.getItem("module_widths_grid");
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error("Failed to parse module widths", e);
-        }
+  const [moduleWidths, setModuleWidths] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem('module_widths_grid');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (err) {
+        console.error('Failed to parse module widths', err);
       }
-      return {};
-    },
-  );
+    }
+    return {};
+  });
 
   // --- Initial Layout Restoration ---
   // If the backend has a saved layout (from session.json), use it.
   // Otherwise, fallback to localStorage.
   useEffect(() => {
     if (engineState && Object.keys(engineState.positions || {}).length > 0) {
-      console.log("Restoring layout from engine state...");
-      setPositions(engineState.positions);
-      setModuleHeights(engineState.heights || {});
-      setModuleWidths(engineState.widths || {});
+      console.log('Restoring layout from engine state...');
+      // Wrap in a timeout to avoid cascading renders (React 19 rule)
+      setTimeout(() => {
+        setPositions(engineState.positions);
+        setModuleHeights(engineState.heights || {});
+        setModuleWidths(engineState.widths || {});
+      }, 0);
     }
-  }, [engineState === null]); // Run once when engineState first arrives
+  }, [engineState]); // Run when engineState arrives or changes
 
   // Helper to find the next empty slot in the grid (used only for NEW modules)
-  const findNextAvailableSlot = (
-    currentPositions: Record<string, GridPosition>,
-    type: string,
-  ): GridPosition => {
-    const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
-    const maxGx = Math.max(
-      MODULE_W_UNITS,
-      Math.floor(availableWidthPx / GRID_UNIT_PX),
-    );
+  const findNextAvailableSlot = useCallback(
+    (currentPositions: Record<string, GridPosition>, type: string): GridPosition => {
+      const availableWidthPx = window.innerWidth - SIDEBAR_WIDTH_PX - 20;
+      const maxGx = Math.max(MODULE_W_UNITS, Math.floor(availableWidthPx / GRID_UNIT_PX));
 
-    const typeMap: Record<string, string> = {};
-    engineState?.modules?.forEach((m) => {
-      typeMap[m.id] = m.config.type;
-    });
-    const getH = (mid: string) =>
-      moduleHeights[mid] ||
-      MODULE_HEIGHTS[typeMap[mid] || "default"] ||
-      MODULE_H_UNITS;
-    const getW = (mid: string) => moduleWidths[mid] || MODULE_W_UNITS;
+      const typeMap: Record<string, string> = {};
+      engineState?.modules?.forEach((m) => {
+        typeMap[m.id] = m.config.type;
+      });
+      const getH = (mid: string) =>
+        moduleHeights[mid] || MODULE_HEIGHTS[typeMap[mid] || 'default'] || MODULE_H_UNITS;
+      const getW = (mid: string) => moduleWidths[mid] || MODULE_W_UNITS;
 
-    return findFreeSlot(
-      MODULE_HEIGHTS[type] || MODULE_H_UNITS,
-      currentPositions,
-      getH,
-      getW,
-      maxGx,
-    );
-  };
+      return findFreeSlot(
+        MODULE_HEIGHTS[type] || MODULE_H_UNITS,
+        currentPositions,
+        getH,
+        getW,
+        maxGx,
+      );
+    },
+    [engineState?.modules, moduleHeights, moduleWidths],
+  );
 
   useEffect(() => {
     // --- Layout Sync to Backend ---
     // This ensures the backend AppConfig stays in sync for session persistence.
     // We only sync if there is actually data to sync.
     if (Object.keys(positions).length > 0) {
-      invoke("update_layout", {
+      invoke('update_layout', {
         positions,
         heights: moduleHeights,
         widths: moduleWidths,
-      }).catch((e) => console.error("Failed to sync layout to backend:", e));
+      }).catch((e) => console.error('Failed to sync layout to backend:', e));
     }
   }, [positions, moduleHeights, moduleWidths]);
 
@@ -171,48 +163,53 @@ function App() {
   useEffect(() => {
     if (!engineState) return;
 
-    setPositions((prev) => {
-      let changed = false;
-      let addedIds: string[] = [];
-      const next = { ...prev };
+    // Wrap in timeout to avoid cascading renders
+    setTimeout(() => {
+      setPositions((prev) => {
+        let changed = false;
+        const addedIds: string[] = [];
+        const next = { ...prev };
 
-      const currentIds = new Set((engineState.modules || []).map((m) => m.id));
-      Object.keys(next).forEach((id) => {
-        if (!currentIds.has(id)) {
-          delete next[id];
-          changed = true;
+        const currentIds = new Set((engineState.modules || []).map((m) => m.id));
+        Object.keys(next).forEach((id) => {
+          if (!currentIds.has(id)) {
+            delete next[id];
+            changed = true;
+          }
+        });
+
+        engineState.modules?.forEach((m) => {
+          if (!next[m.id]) {
+            const nextSlot = findNextAvailableSlot(next, m.config.type);
+            next[m.id] = nextSlot;
+            addedIds.push(m.id);
+            changed = true;
+          }
+        });
+
+        if (changed) {
+          localStorage.setItem('module_positions_grid', JSON.stringify(next));
+          if (addedIds.length > 0) {
+            setNewlyAddedModuleIds((prevIds) => [...prevIds, ...addedIds]);
+          }
+          return next;
         }
+        return prev;
       });
-
-      engineState.modules?.forEach((m) => {
-        if (!next[m.id]) {
-          const nextSlot = findNextAvailableSlot(next, m.config.type);
-          next[m.id] = nextSlot;
-          addedIds.push(m.id);
-          changed = true;
-        }
-      });
-
-      if (changed) {
-        localStorage.setItem("module_positions_grid", JSON.stringify(next));
-        if (addedIds.length > 0) {
-          setNewlyAddedModuleIds((prevIds) => [...prevIds, ...addedIds]);
-        }
-        return next;
-      }
-      return prev;
-    });
-  }, [engineState?.modules]);
+    }, 0);
+  }, [engineState?.modules, findNextAvailableSlot, engineState]);
 
   // Handle flash animation side-effects
   useEffect(() => {
     if (newlyAddedModuleIds.length > 0) {
       if (expectingNewModule) {
-        setNewlyPlacedIds((prev) => {
-          const nextSet = new Set(prev);
-          newlyAddedModuleIds.forEach((id) => nextSet.add(id));
-          return nextSet;
-        });
+        setTimeout(() => {
+          setNewlyPlacedIds((prev) => {
+            const nextSet = new Set(prev);
+            newlyAddedModuleIds.forEach((id) => nextSet.add(id));
+            return nextSet;
+          });
+        }, 0);
 
         // Set individual timeouts for each added module
         newlyAddedModuleIds.forEach((id) => {
@@ -225,10 +222,13 @@ function App() {
           }, 1000);
         });
       }
-      setExpectingNewModule(false);
-      setNewlyAddedModuleIds([]);
+      // Use a timeout to avoid synchronous cascading render state updates
+      setTimeout(() => {
+        setExpectingNewModule(false);
+        setNewlyAddedModuleIds([]);
+      }, 0);
     }
-  }, [newlyAddedModuleIds, expectingNewModule]);
+  }, [newlyAddedModuleIds, expectingNewModule, engineState]);
 
   const handleDrag = (
     _id: string,
@@ -252,7 +252,7 @@ function App() {
 
     setPositions((prev) => {
       const next = { ...prev, [id]: pos };
-      localStorage.setItem("module_positions_grid", JSON.stringify(next));
+      localStorage.setItem('module_positions_grid', JSON.stringify(next));
       return next;
     });
   };
@@ -260,24 +260,24 @@ function App() {
   useEffect(() => {
     if (!showAddMenu) return;
 
-    const handleContext = (_e: MouseEvent) => {
+    const handleContext = () => {
       setShowAddMenu(false);
     };
 
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       // Close if click is outside the menu and not on the toggle button
-      if (!target.closest(".add-module-menu") && !target.closest(".add-btn")) {
+      if (!target.closest('.add-module-menu') && !target.closest('.add-btn')) {
         setShowAddMenu(false);
       }
     };
 
-    window.addEventListener("contextmenu", handleContext);
-    window.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener('contextmenu', handleContext);
+    window.addEventListener('mousedown', handleClickOutside);
 
     return () => {
-      window.removeEventListener("contextmenu", handleContext);
-      window.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener('contextmenu', handleContext);
+      window.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showAddMenu]);
 
@@ -313,14 +313,14 @@ function App() {
   };
 
   const handleUpdateConfig = (_id: string, config: ModuleConfig) => {
-    invoke("update_config", { config });
+    invoke('update_config', { config });
   };
 
   const handleHeightReport = (id: string, units: number) => {
     setModuleHeights((prev) => {
       if (prev[id] === units) return prev;
       const nextHeights = { ...prev, [id]: units };
-      localStorage.setItem("module_heights_grid", JSON.stringify(nextHeights));
+      localStorage.setItem('module_heights_grid', JSON.stringify(nextHeights));
       return nextHeights;
     });
   };
@@ -335,9 +335,8 @@ function App() {
 
     Object.entries(positions).forEach(([id, pos]) => {
       const effectivePos = id === draggingId && draggingPos ? draggingPos : pos;
-      const mType = typeMap[id] || "default";
-      const mHeight =
-        moduleHeights[id] || MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
+      const mType = typeMap[id] || 'default';
+      const mHeight = moduleHeights[id] || MODULE_HEIGHTS[mType] || MODULE_H_UNITS;
       const mWidth = moduleWidths[id] || MODULE_W_UNITS;
       maxGx = Math.max(maxGx, effectivePos.gx + mWidth);
       maxGy = Math.max(maxGy, effectivePos.gy + mHeight);
@@ -346,25 +345,24 @@ function App() {
     const effectiveGridUnit = GRID_UNIT_PX || 18;
 
     return {
-      minWidth: "100%",
-      minHeight: "100vh",
-      width: maxGx > 0 ? `calc(var(--grid-unit) * ${maxGx + 5})` : "100%",
-      height: maxGy > 0 ? `calc(var(--grid-unit) * ${maxGy + 10})` : "100%",
-      position: "relative" as const,
-      "--grid-unit": `${effectiveGridUnit}px`,
-      transition: "width 0.2s ease, height 0.2s ease",
+      minWidth: '100%',
+      minHeight: '100vh',
+      width: maxGx > 0 ? `calc(var(--grid-unit) * ${maxGx + 5})` : '100%',
+      height: maxGy > 0 ? `calc(var(--grid-unit) * ${maxGy + 10})` : '100%',
+      position: 'relative' as const,
+      '--grid-unit': `${effectiveGridUnit}px`,
+      transition: 'width 0.2s ease, height 0.2s ease',
     } as React.CSSProperties;
   };
 
-  const renderModule = (module: any) => {
+  const renderModule = (module: { id: string; config: ModuleConfig }) => {
     const pos = positions[module.id];
     if (!pos) return null;
 
     const config = module.config;
     if (!config || !config.data) return null;
 
-    const mHeight =
-      moduleHeights[module.id] || MODULE_HEIGHTS[config.type] || MODULE_H_UNITS;
+    const mHeight = moduleHeights[module.id] || MODULE_HEIGHTS[config.type] || MODULE_H_UNITS;
     const mWidth = moduleWidths[module.id] || MODULE_W_UNITS;
 
     const commonProps = {
@@ -379,7 +377,7 @@ function App() {
         setModuleWidths((prev) => {
           if (prev[id] === units) return prev;
           const next = { ...prev, [id]: units };
-          localStorage.setItem("module_widths_grid", JSON.stringify(next));
+          localStorage.setItem('module_widths_grid', JSON.stringify(next));
           return next;
         });
       },
@@ -390,141 +388,118 @@ function App() {
     let moduleComponent = null;
 
     switch (config.type) {
-      case "Gain":
+      case 'Gain':
         moduleComponent = (
           <GainModule
             key={module.id}
             {...commonProps}
             config={config.data as GainConfig}
-            onChange={(data) =>
-              handleUpdateConfig(module.id, { type: "Gain", data })
-            }
+            onChange={(data) => handleUpdateConfig(module.id, { type: 'Gain', data })}
           />
         );
         break;
-      case "Expander":
+      case 'Expander':
         moduleComponent = (
           <ExpanderModule
             key={module.id}
             {...commonProps}
             config={config.data as ExpanderConfig}
-            onChange={(data) =>
-              handleUpdateConfig(module.id, { type: "Expander", data })
-            }
+            onChange={(data) => handleUpdateConfig(module.id, { type: 'Expander', data })}
           />
         );
         break;
-      case "RNNoise":
+      case 'RNNoise':
         moduleComponent = (
           <RNNoiseModule
             key={module.id}
             {...commonProps}
             config={config.data as RNNoiseConfig}
-            onChange={(data) =>
-              handleUpdateConfig(module.id, { type: "RNNoise", data })
-            }
+            onChange={(data) => handleUpdateConfig(module.id, { type: 'RNNoise', data })}
           />
         );
         break;
-      case "Compressor":
+      case 'Compressor':
         moduleComponent = (
           <CompressorModule
             {...commonProps}
             config={module.config.data as CompressorConfig}
-            onChange={(data) =>
-              handleUpdateConfig(module.id, { type: "Compressor", data })
-            }
+            onChange={(data) => handleUpdateConfig(module.id, { type: 'Compressor', data })}
           />
         );
         break;
-      case "ParametricEQ":
+      case 'ParametricEQ':
         moduleComponent = (
           <ParametricEQModule
             {...commonProps}
             config={module.config.data as ParametricEQConfig}
-            onChange={(data) =>
-              handleUpdateConfig(module.id, { type: "ParametricEQ", data })
-            }
+            onChange={(data) => handleUpdateConfig(module.id, { type: 'ParametricEQ', data })}
           />
         );
         break;
-      case "Deesser":
+      case 'Deesser':
         moduleComponent = (
           <DeesserModule
             key={module.id}
             {...commonProps}
             config={config.data as DeesserConfig}
-            onChange={(data) =>
-              handleUpdateConfig(module.id, { type: "Deesser", data })
-            }
+            onChange={(data) => handleUpdateConfig(module.id, { type: 'Deesser', data })}
           />
         );
         break;
-      case "Saturation":
+      case 'Saturation':
         moduleComponent = (
           <SaturationModule
             key={module.id}
             {...commonProps}
             config={config.data as SaturationConfig}
-            onChange={(data) =>
-              handleUpdateConfig(module.id, { type: "Saturation", data })
-            }
+            onChange={(data) => handleUpdateConfig(module.id, { type: 'Saturation', data })}
           />
         );
         break;
-      case "Limiter":
+      case 'Limiter':
         moduleComponent = (
           <LimiterModule
             key={module.id}
             {...commonProps}
             config={config.data as LimiterConfig}
-            onUpdate={(data) =>
-              handleUpdateConfig(module.id, { type: "Limiter", data })
-            }
+            onUpdate={(data) => handleUpdateConfig(module.id, { type: 'Limiter', data })}
             onRemove={() => removeModule(module.id)}
             onToggle={(enabled) =>
               handleUpdateConfig(module.id, {
-                type: "Limiter",
+                type: 'Limiter',
                 data: { ...(config.data as LimiterConfig), enabled },
               })
             }
           />
         );
         break;
-      case "Dereverb":
+      case 'Dereverb':
         moduleComponent = (
           <DereverbModule
             key={module.id}
             {...commonProps}
             config={config.data as DereverbConfig}
-            onUpdate={(data) =>
-              handleUpdateConfig(module.id, { type: "Dereverb", data })
-            }
+            onUpdate={(data) => handleUpdateConfig(module.id, { type: 'Dereverb', data })}
             onRemove={() => removeModule(module.id)}
             onToggle={(enabled) =>
               handleUpdateConfig(module.id, {
-                type: "Dereverb",
+                type: 'Dereverb',
                 data: { ...(config.data as DereverbConfig), enabled },
               })
             }
           />
         );
         break;
-      case "Filter":
+      case 'Filter':
         moduleComponent = (
           <FilterModule
             key={module.id}
             {...commonProps}
             config={config.data as FilterConfig}
-            onChange={(data) =>
-              handleUpdateConfig(module.id, { type: "Filter", data })
-            }
+            onChange={(data) => handleUpdateConfig(module.id, { type: 'Filter', data })}
           />
         );
         break;
-      case "Visualizer":
-        // Removed from grid: rendered in sidebar now.
-        return null;
     }
 
     return moduleComponent;
@@ -559,9 +534,7 @@ function App() {
             <div className="metrics-panel">
               <div className="metric">
                 <label>Latency</label>
-                <span data-testid="latency-value">
-                  {`${Math.round(metrics.latency_ms)} ms`}
-                </span>
+                <span data-testid="latency-value">{`${Math.round(metrics.latency_ms)} ms`}</span>
               </div>
               <div className="metric">
                 <label>CPU Usage</label>
@@ -572,15 +545,15 @@ function App() {
                 <span>
                   {isRunning && engineState
                     ? `${(engineState.sample_rate / 1000).toFixed(1)} kHz`
-                    : "---"}
+                    : '---'}
                 </span>
               </div>
               <div className="metric">
                 <label>Buffer</label>
                 <span>
                   {isRunning
-                    ? `${metrics.buffer_size || (engineState?.buffer_size ?? "---")} smp`
-                    : "---"}
+                    ? `${metrics.buffer_size || (engineState?.buffer_size ?? '---')} smp`
+                    : '---'}
                 </span>
               </div>
             </div>
@@ -597,10 +570,10 @@ function App() {
 
         <div className="sidebar-footer">
           <button
-            className={`engine-toggle ${isRunning ? "stop" : "start"}`}
+            className={`engine-toggle ${isRunning ? 'stop' : 'start'}`}
             onClick={toggleEngine}
           >
-            {isRunning ? "Stop Engine" : "Start Engine"}
+            {isRunning ? 'Stop Engine' : 'Start Engine'}
           </button>
         </div>
       </aside>
@@ -610,8 +583,8 @@ function App() {
           {engineState?.modules?.map((m) => {
             try {
               return renderModule(m);
-            } catch (e) {
-              console.error(`Failed to render module ${m.id}:`, e);
+            } catch (err) {
+              console.error(`Failed to render module ${m.id}:`, err);
               return null;
             }
           })}

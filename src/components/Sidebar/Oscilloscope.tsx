@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import "./Oscilloscope.css";
+import { useEffect, useRef, useState } from 'react';
+import './Oscilloscope.css';
 
 interface OscilloscopeProps {
   waveform: number[];
@@ -21,8 +21,12 @@ export function Oscilloscope({ waveform, isRunning }: OscilloscopeProps) {
   const isRunningRef = useRef<boolean>(isRunning);
 
   // Keep refs up-to-date without restarting the animation loop
-  useEffect(() => { waveformRef.current = waveform; }, [waveform]);
-  useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
+  useEffect(() => {
+    waveformRef.current = waveform;
+  }, [waveform]);
+  useEffect(() => {
+    isRunningRef.current = isRunning;
+  }, [isRunning]);
 
   // 1. Animation Loop & Physics - starts once, reads from refs
   useEffect(() => {
@@ -50,7 +54,7 @@ export function Oscilloscope({ waveform, isRunning }: OscilloscopeProps) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     // High DPI Scaling
@@ -68,7 +72,7 @@ export function Oscilloscope({ waveform, isRunning }: OscilloscopeProps) {
     ctx.clearRect(0, 0, displayWidth, displayHeight);
 
     // Draw very subtle zero line
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.02)";
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, displayHeight / 2);
@@ -80,10 +84,10 @@ export function Oscilloscope({ waveform, isRunning }: OscilloscopeProps) {
 
     // --- Pass 1: Neural Glow (Single Continuous Path) ---
     ctx.beginPath();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
     ctx.lineWidth = 3;
     ctx.shadowBlur = 10;
-    ctx.shadowColor = "rgba(255, 255, 255, 0.3)";
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
 
     ctx.moveTo(0, displayHeight / 2);
     for (let i = 0; i < points.length - 1; i++) {
@@ -99,8 +103,8 @@ export function Oscilloscope({ waveform, isRunning }: OscilloscopeProps) {
 
     // --- Pass 2: Variable Weight Core (Segmented for Dynamic Thickness) ---
     ctx.shadowBlur = 0;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
     // We use quadratic interpolation for segment endpoints to match the glow path exactly
     for (let i = 0; i < points.length - 1; i++) {
@@ -118,11 +122,7 @@ export function Oscilloscope({ waveform, isRunning }: OscilloscopeProps) {
       let prevYc = displayHeight / 2;
       if (i > 0) {
         prevXc = ((i - 1) * sliceWidth + currentX) / 2;
-        prevYc =
-          (points[i - 1] * (displayHeight / 1.7) +
-            displayHeight / 2 +
-            currentY) /
-          2;
+        prevYc = (points[i - 1] * (displayHeight / 1.7) + displayHeight / 2 + currentY) / 2;
       }
 
       // Variable weight based on current point amplitude
@@ -130,7 +130,7 @@ export function Oscilloscope({ waveform, isRunning }: OscilloscopeProps) {
       const dynamicWeight = 0.8 + absY * 2.8;
 
       ctx.lineWidth = dynamicWeight;
-      ctx.strokeStyle = "#ffffff";
+      ctx.strokeStyle = '#ffffff';
 
       ctx.beginPath();
       ctx.moveTo(prevXc, prevYc);
@@ -141,12 +141,7 @@ export function Oscilloscope({ waveform, isRunning }: OscilloscopeProps) {
 
   return (
     <div className="oscilloscope-container animated">
-      <canvas
-        ref={canvasRef}
-        width={300}
-        height={130}
-        className="oscope-canvas"
-      />
+      <canvas ref={canvasRef} width={300} height={130} className="oscope-canvas" />
     </div>
   );
 }

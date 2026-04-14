@@ -1,6 +1,6 @@
-import { ParametricEQConfig, GridPosition, EQBandConfig } from "../../types";
-import { BaseModule } from "./BaseModule";
-import "./ParametricEQModule.css";
+import { ParametricEQConfig, GridPosition, EQBandConfig } from '../../types';
+import { BaseModule } from './BaseModule';
+import './ParametricEQModule.css';
 
 interface ParametricEQModuleProps {
   id: string;
@@ -45,8 +45,8 @@ export function ParametricEQModule({
   };
 
   const getBandName = (index: number, type: string) => {
-    if (type === "LowShelf") return "Low Shelf";
-    if (type === "HighShelf") return "High Shelf";
+    if (type === 'LowShelf') return 'Low Shelf';
+    if (type === 'HighShelf') return 'High Shelf';
     return `Mid ${index}`;
   };
 
@@ -72,14 +72,9 @@ export function ParametricEQModule({
       </p>
       <div className="eq-bands">
         {config.bands.map((band, i) => (
-          <div
-            key={i}
-            className={`eq-band ${!band.enabled ? "band-disabled" : ""}`}
-          >
+          <div key={i} className={`eq-band ${!band.enabled ? 'band-disabled' : ''}`}>
             <div className="band-header">
-              <span className="band-name">
-                {getBandName(i, band.filter_type)}
-              </span>
+              <span className="band-name">{getBandName(i, band.filter_type)}</span>
               <input
                 type="checkbox"
                 checked={band.enabled}
@@ -97,9 +92,7 @@ export function ParametricEQModule({
                   step="1"
                   value={band.frequency}
                   disabled={!config.enabled || !band.enabled}
-                  onChange={(e) =>
-                    updateBand(i, { frequency: parseFloat(e.target.value) })
-                  }
+                  onChange={(e) => updateBand(i, { frequency: parseFloat(e.target.value) })}
                 />
               </label>
             </div>
@@ -114,9 +107,7 @@ export function ParametricEQModule({
                   step="0.1"
                   value={band.gain_db}
                   disabled={!config.enabled || !band.enabled}
-                  onChange={(e) =>
-                    updateBand(i, { gain_db: parseFloat(e.target.value) })
-                  }
+                  onChange={(e) => updateBand(i, { gain_db: parseFloat(e.target.value) })}
                 />
               </label>
             </div>
@@ -131,9 +122,7 @@ export function ParametricEQModule({
                   step="0.01"
                   value={band.q}
                   disabled={!config.enabled || !band.enabled}
-                  onChange={(e) =>
-                    updateBand(i, { q: parseFloat(e.target.value) })
-                  }
+                  onChange={(e) => updateBand(i, { q: parseFloat(e.target.value) })}
                 />
               </label>
             </div>

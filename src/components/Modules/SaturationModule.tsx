@@ -1,5 +1,5 @@
-import { SaturationConfig, GridPosition } from "../../types";
-import { BaseModule } from "./BaseModule";
+import { SaturationConfig, GridPosition } from '../../types';
+import { BaseModule } from './BaseModule';
 
 interface SaturationModuleProps {
   id: string;
@@ -58,9 +58,7 @@ export function SaturationModule({
       style={style}
       isNewlyPlaced={isNewlyPlaced}
     >
-      <p className="module-description">
-        Adds warm harmonic character and vintage analog weight.
-      </p>
+      <p className="module-description">Adds warm harmonic character and vintage analog weight.</p>
       <div className="control-group">
         <label>
           Drive <span>{config.drive.toFixed(1)}x</span>
@@ -71,9 +69,7 @@ export function SaturationModule({
             step="0.1"
             value={config.drive}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ drive: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ drive: parseFloat(e.target.value) })}
           />
         </label>
       </div>

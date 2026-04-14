@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
-import { BaseModule } from "./BaseModule";
-import { Visualizer } from "../Visualizer/Visualizer";
-import { GridPosition } from "../../types";
+import { BaseModule } from './BaseModule';
+import { Visualizer } from '../Visualizer/Visualizer';
+import { GridPosition } from '../../types';
 
 interface VisualizerModuleProps {
   id: string;
@@ -68,14 +68,8 @@ export function VisualizerModule({
       style={style}
       isNewlyPlaced={isNewlyPlaced}
     >
-      <div
-        style={{ flex: 1, minHeight: "100px", width: "100%", marginTop: "4px" }}
-      >
-        <Visualizer
-          isRunning={isRunning && enabled}
-          spectrum={spectrum}
-          tonality={tonality}
-        />
+      <div style={{ flex: 1, minHeight: '100px', width: '100%', marginTop: '4px' }}>
+        <Visualizer isRunning={isRunning && enabled} spectrum={spectrum} tonality={tonality} />
       </div>
     </BaseModule>
   );

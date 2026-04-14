@@ -1,5 +1,5 @@
-import { RNNoiseConfig, GridPosition } from "../../types";
-import { BaseModule } from "./BaseModule";
+import { RNNoiseConfig, GridPosition } from '../../types';
+import { BaseModule } from './BaseModule';
 
 interface RNNoiseModuleProps {
   id: string;
@@ -32,7 +32,7 @@ export function RNNoiseModule({
   onDrag,
   onHeightReport,
   onWidthReport,
-  title = "Noise Suppression",
+  title = 'Noise Suppression',
   config,
   onChange,
   onRemove,

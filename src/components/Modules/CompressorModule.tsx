@@ -1,5 +1,5 @@
-import { CompressorConfig, GridPosition } from "../../types";
-import { BaseModule } from "./BaseModule";
+import { CompressorConfig, GridPosition } from '../../types';
+import { BaseModule } from './BaseModule';
 
 interface CompressorModuleProps {
   id: string;
@@ -71,9 +71,7 @@ export function CompressorModule({
             step="0.1"
             value={config.threshold_db}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ threshold_db: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ threshold_db: parseFloat(e.target.value) })}
           />
         </label>
       </div>
@@ -87,9 +85,7 @@ export function CompressorModule({
             step="0.1"
             value={config.ratio}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ ratio: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ ratio: parseFloat(e.target.value) })}
           />
         </label>
       </div>
@@ -103,9 +99,7 @@ export function CompressorModule({
             step="0.1"
             value={config.knee_db}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ knee_db: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ knee_db: parseFloat(e.target.value) })}
           />
         </label>
       </div>
@@ -119,9 +113,7 @@ export function CompressorModule({
             step="0.1"
             value={config.attack_ms}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ attack_ms: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ attack_ms: parseFloat(e.target.value) })}
           />
         </label>
       </div>
@@ -135,9 +127,7 @@ export function CompressorModule({
             step="1"
             value={config.release_ms}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ release_ms: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ release_ms: parseFloat(e.target.value) })}
           />
         </label>
       </div>
@@ -151,9 +141,7 @@ export function CompressorModule({
             step="0.1"
             value={config.makeup_gain_db}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ makeup_gain_db: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ makeup_gain_db: parseFloat(e.target.value) })}
           />
         </label>
       </div>

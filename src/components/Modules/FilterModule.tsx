@@ -1,5 +1,5 @@
-import { FilterConfig, GridPosition } from "../../types";
-import { BaseModule } from "./BaseModule";
+import { FilterConfig, GridPosition } from '../../types';
+import { BaseModule } from './BaseModule';
 
 interface FilterModuleProps {
   id: string;
@@ -70,7 +70,7 @@ export function FilterModule({
             disabled={!config.enabled}
             onChange={(e) =>
               updateConfig({
-                filter_type: e.target.value as FilterConfig["filter_type"],
+                filter_type: e.target.value as FilterConfig['filter_type'],
               })
             }
           >
@@ -91,9 +91,7 @@ export function FilterModule({
             step="1"
             value={config.frequency}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ frequency: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ frequency: parseFloat(e.target.value) })}
           />
         </label>
       </div>

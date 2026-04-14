@@ -1,5 +1,5 @@
-import { DeesserConfig, GridPosition } from "../../types";
-import { BaseModule } from "./BaseModule";
+import { DeesserConfig, GridPosition } from '../../types';
+import { BaseModule } from './BaseModule';
 
 interface DeesserModuleProps {
   id: string;
@@ -71,9 +71,7 @@ export function DeesserModule({
             step="0.1"
             value={config.threshold_db}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ threshold_db: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ threshold_db: parseFloat(e.target.value) })}
           />
         </label>
       </div>
@@ -87,9 +85,7 @@ export function DeesserModule({
             step="100"
             value={config.frequency}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ frequency: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ frequency: parseFloat(e.target.value) })}
           />
         </label>
       </div>
@@ -103,9 +99,7 @@ export function DeesserModule({
             step="0.1"
             value={config.ratio}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ ratio: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ ratio: parseFloat(e.target.value) })}
           />
         </label>
       </div>

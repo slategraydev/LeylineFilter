@@ -1,6 +1,6 @@
-import React from "react";
-import { BaseModule } from "./BaseModule";
-import { LimiterConfig, GridPosition } from "../../types";
+import React from 'react';
+import { BaseModule } from './BaseModule';
+import { LimiterConfig, GridPosition } from '../../types';
 
 interface LimiterModuleProps {
   id: string;
@@ -55,9 +55,7 @@ export const LimiterModule: React.FC<LimiterModuleProps> = ({
       onRemove={onRemove}
       isNewlyPlaced={isNewlyPlaced}
     >
-      <p className="module-description">
-        Hard-caps peaks to ensure zero digital clipping.
-      </p>
+      <p className="module-description">Hard-caps peaks to ensure zero digital clipping.</p>
       <div className="control-group">
         <label>
           Threshold <span>{config.threshold_db.toFixed(1)} dB</span>
@@ -68,9 +66,7 @@ export const LimiterModule: React.FC<LimiterModuleProps> = ({
             step="0.1"
             value={config.threshold_db}
             disabled={!config.enabled}
-            onChange={(e) =>
-              onUpdate({ ...config, threshold_db: parseFloat(e.target.value) })
-            }
+            onChange={(e) => onUpdate({ ...config, threshold_db: parseFloat(e.target.value) })}
           />
         </label>
       </div>
@@ -85,9 +81,7 @@ export const LimiterModule: React.FC<LimiterModuleProps> = ({
             step="1"
             value={config.release_ms}
             disabled={!config.enabled}
-            onChange={(e) =>
-              onUpdate({ ...config, release_ms: parseInt(e.target.value) })
-            }
+            onChange={(e) => onUpdate({ ...config, release_ms: parseInt(e.target.value) })}
           />
         </label>
       </div>

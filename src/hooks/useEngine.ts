@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
-import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { EngineMetrics, EngineState } from "../types";
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { EngineMetrics, EngineState } from '../types';
 
 /**
  * # Engine Hook
@@ -14,8 +14,8 @@ export function useEngine() {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [inputDevices, setInputDevices] = useState<string[]>([]);
   const [outputDevices, setOutputDevices] = useState<string[]>([]);
-  const [selectedInput, setSelectedInput] = useState<string>("Default");
-  const [selectedOutput, setSelectedOutput] = useState<string>("Default");
+  const [selectedInput, setSelectedInput] = useState<string>('Default');
+  const [selectedOutput, setSelectedOutput] = useState<string>('Default');
   const [engineState, setEngineState] = useState<EngineState | null>(null);
   const [metrics, setMetrics] = useState<EngineMetrics>({
     latency_ms: 0,
@@ -35,20 +35,20 @@ export function useEngine() {
     // --- Initialization ---
     // This only runs once on mount to populate the device lists
     // and fetch the initial engine state.
-    invoke<string[]>("get_input_devices").then((d) =>
-      setInputDevices(Array.from(new Set(["Default", ...d]))),
+    invoke<string[]>('get_input_devices').then((d) =>
+      setInputDevices(Array.from(new Set(['Default', ...d]))),
     );
-    invoke<string[]>("get_output_devices").then((d) =>
-      setOutputDevices(Array.from(new Set(["Default", ...d]))),
+    invoke<string[]>('get_output_devices').then((d) =>
+      setOutputDevices(Array.from(new Set(['Default', ...d]))),
     );
 
     // Initial state fetch
-    invoke<EngineState>("get_engine_state").then((state) => {
+    invoke<EngineState>('get_engine_state').then((state) => {
       setEngineState(state);
       setIsRunning(state.is_running);
       setIsMonitoring(state.monitoring_enabled);
-      setSelectedInput(state.input_device ?? "Default");
-      setSelectedOutput(state.output_device ?? "Default");
+      setSelectedInput(state.input_device ?? 'Default');
+      setSelectedOutput(state.output_device ?? 'Default');
     });
   }, []);
 
@@ -61,9 +61,7 @@ export function useEngine() {
      */
     const interval = setInterval(async () => {
       try {
-        const m = await invoke<EngineMetrics & { state_version: number }>(
-          "get_metrics",
-        );
+        const m = await invoke<EngineMetrics & { state_version: number }>('get_metrics');
 
         // Comprehensive safety check for every property
         const safeMetrics: EngineMetrics = {
@@ -86,17 +84,17 @@ export function useEngine() {
          * reports a version change (e.g., a module was added or removed).
          */
         if (safeMetrics.state_version !== lastVersion) {
-          const state = await invoke<EngineState>("get_engine_state");
+          const state = await invoke<EngineState>('get_engine_state');
           if (state) {
             setEngineState(state);
             setIsRunning(state.is_running ?? false);
             setIsMonitoring(state.monitoring_enabled ?? true);
-            setSelectedInput(state.input_device ?? "Default");
-            setSelectedOutput(state.output_device ?? "Default");
+            setSelectedInput(state.input_device ?? 'Default');
+            setSelectedOutput(state.output_device ?? 'Default');
             setLastVersion(safeMetrics.state_version);
           }
         }
-      } catch (e) {
+      } catch {
         // Silently fail if backend not ready (e.g. app closing)
       }
     }, 33);
@@ -105,62 +103,60 @@ export function useEngine() {
 
   const setMonitoring = async (enabled: boolean) => {
     try {
-      await invoke("set_monitoring", { enabled });
+      await invoke('set_monitoring', { enabled });
       setIsMonitoring(enabled);
-    } catch (e) {
-      console.error("Failed to toggle monitoring:", e);
+    } catch (err) {
+      console.error('Failed to toggle monitoring:', err);
     }
   };
 
   const startEngine = async (inputDevice: string, outputDevice: string) => {
     try {
-      console.log(
-        `Starting engine with Input: ${inputDevice}, Output: ${outputDevice}`,
-      );
-      await invoke("start_engine", {
+      console.log(`Starting engine with Input: ${inputDevice}, Output: ${outputDevice}`);
+      await invoke('start_engine', {
         inputDevice: inputDevice,
         outputDevice: outputDevice,
       });
       setIsRunning(true);
       // Force a state refresh immediately after start
-      const state = await invoke<EngineState>("get_engine_state");
+      const state = await invoke<EngineState>('get_engine_state');
       setEngineState(state);
       setLastVersion(0);
-    } catch (e) {
-      console.error("Failed to start engine:", e);
-      alert(`Engine Error: ${e}`);
+    } catch (err) {
+      console.error('Failed to start engine:', err);
+      alert(`Engine Error: ${err}`);
       setIsRunning(false);
     }
   };
 
   const stopEngine = async () => {
-    await invoke("stop_engine");
+    await invoke('stop_engine');
     setIsRunning(false);
   };
 
   const addModule = async (moduleType: string) => {
     try {
-      await invoke("send_command", {
+      await invoke('send_command', {
         command: {
-          type: "AddModule",
+          type: 'AddModule',
           data: { module_type: moduleType },
         },
       });
-    } catch (e) {
-      console.error("Failed to add module:", e);
+    } catch (err) {
+      console.error('Failed to add module:', err);
     }
   };
 
   const removeModule = async (id: string) => {
     try {
-      await invoke("send_command", {
+      await invoke('send_command', {
         command: {
-          type: "RemoveModule",
+          type: 'RemoveModule',
           data: { id },
         },
       });
-    } catch (e) {
-      console.error("Failed to remove module:", e);
+    } catch (err) {
+      console.error('Failed to remove module:', err);
     }
   };
 

@@ -11,16 +11,16 @@ describe('FilterModule', () => {
   };
 
   const defaultProps = {
-    id: "test-filter",
+    id: 'test-filter',
     initialPosition: { gx: 1, gy: 1 },
     heightUnits: 24,
     widthUnits: 18,
-    onPositionChange: () => { },
-    onHeightReport: () => { },
+    onPositionChange: () => {},
+    onHeightReport: () => {},
   };
 
   it('renders correctly with default config', () => {
-    render(<FilterModule {...defaultProps} config={defaultConfig} onChange={() => { }} />);
+    render(<FilterModule {...defaultProps} config={defaultConfig} onChange={() => {}} />);
     expect(screen.getByText(/Audio Filter/i)).toBeInTheDocument();
     expect(screen.getByText(/1000 Hz/i)).toBeInTheDocument();
   });
@@ -32,9 +32,11 @@ describe('FilterModule', () => {
     const freqSlider = screen.getByLabelText(/Frequency/i);
     fireEvent.change(freqSlider, { target: { value: '500' } });
 
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-      frequency: 500
-    }));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        frequency: 500,
+      }),
+    );
   });
 
   it('updates filter type', () => {
@@ -44,17 +46,19 @@ describe('FilterModule', () => {
     const typeSelect = screen.getByRole('combobox');
     fireEvent.change(typeSelect, { target: { value: 'HPF' } });
 
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-      filter_type: 'HPF'
-    }));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filter_type: 'HPF',
+      }),
+    );
   });
 
   it('disables inputs when module is disabled', () => {
     const disabledConfig = { ...defaultConfig, enabled: false };
-    render(<FilterModule {...defaultProps} config={disabledConfig} onChange={() => { }} />);
+    render(<FilterModule {...defaultProps} config={disabledConfig} onChange={() => {}} />);
 
     const sliders = screen.getAllByRole('slider');
-    sliders.forEach(slider => {
+    sliders.forEach((slider) => {
       expect(slider).toBeDisabled();
     });
 

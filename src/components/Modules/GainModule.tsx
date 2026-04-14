@@ -1,6 +1,6 @@
-import React from "react";
-import { GainConfig, GridPosition } from "../../types";
-import { BaseModule } from "./BaseModule";
+import React from 'react';
+import { GainConfig, GridPosition } from '../../types';
+import { BaseModule } from './BaseModule';
 
 interface Props {
   id: string;
@@ -59,9 +59,7 @@ export const GainModule: React.FC<Props> = ({
       style={style}
       isNewlyPlaced={isNewlyPlaced}
     >
-      <p className="module-description">
-        Adjusts the overall output volume level.
-      </p>
+      <p className="module-description">Adjusts the overall output volume level.</p>
       <div className="control-group">
         <label>
           Gain <span>{config.gain_db.toFixed(1)} dB</span>
@@ -73,9 +71,7 @@ export const GainModule: React.FC<Props> = ({
           step="0.1"
           value={config.gain_db}
           disabled={!config.enabled}
-          onChange={(e) =>
-            updateConfig({ gain_db: parseFloat(e.target.value) })
-          }
+          onChange={(e) => updateConfig({ gain_db: parseFloat(e.target.value) })}
         />
       </div>
     </BaseModule>

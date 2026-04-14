@@ -9,16 +9,16 @@ describe('GainModule', () => {
   };
 
   const defaultProps = {
-    id: "test-gain",
+    id: 'test-gain',
     initialPosition: { gx: 1, gy: 1 },
     heightUnits: 12,
     widthUnits: 18,
-    onPositionChange: () => { },
-    onHeightReport: () => { },
+    onPositionChange: () => {},
+    onHeightReport: () => {},
   };
 
   it('renders correctly with default config', () => {
-    render(<GainModule {...defaultProps} config={defaultConfig} onChange={() => { }} />);
+    render(<GainModule {...defaultProps} config={defaultConfig} onChange={() => {}} />);
     expect(screen.getByText(/Master Gain/i)).toBeInTheDocument();
     expect(screen.getByText(/0.0 dB/i)).toBeInTheDocument();
   });
@@ -30,14 +30,16 @@ describe('GainModule', () => {
     const gainSlider = screen.getByRole('slider');
     fireEvent.change(gainSlider, { target: { value: '5.5' } });
 
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-      gain_db: 5.5
-    }));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gain_db: 5.5,
+      }),
+    );
   });
 
   it('disables inputs when module is disabled', () => {
     const disabledConfig = { ...defaultConfig, enabled: false };
-    render(<GainModule {...defaultProps} config={disabledConfig} onChange={() => { }} />);
+    render(<GainModule {...defaultProps} config={disabledConfig} onChange={() => {}} />);
 
     expect(screen.getByRole('slider')).toBeDisabled();
   });

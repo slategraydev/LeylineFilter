@@ -1,5 +1,5 @@
-import { ExpanderConfig, GridPosition } from "../../types";
-import { BaseModule } from "./BaseModule";
+import { ExpanderConfig, GridPosition } from '../../types';
+import { BaseModule } from './BaseModule';
 
 interface ExpanderModuleProps {
   id: string;
@@ -63,8 +63,7 @@ export function ExpanderModule({
       </p>
       <div className="control-group">
         <label>
-          Threshold{" "}
-          <span>{(20 * Math.log10(config.threshold)).toFixed(1)} dB</span>
+          Threshold <span>{(20 * Math.log10(config.threshold)).toFixed(1)} dB</span>
           <input
             type="range"
             min="0.0001"
@@ -72,9 +71,7 @@ export function ExpanderModule({
             step="0.0001"
             value={config.threshold}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ threshold: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ threshold: parseFloat(e.target.value) })}
           />
         </label>
       </div>
@@ -88,9 +85,7 @@ export function ExpanderModule({
             step="0.1"
             value={config.ratio}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ ratio: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ ratio: parseFloat(e.target.value) })}
           />
         </label>
       </div>
@@ -104,9 +99,7 @@ export function ExpanderModule({
             step="0.1"
             value={config.attack_ms}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ attack_ms: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ attack_ms: parseFloat(e.target.value) })}
           />
         </label>
       </div>
@@ -120,9 +113,7 @@ export function ExpanderModule({
             step="1"
             value={config.release_ms}
             disabled={!config.enabled}
-            onChange={(e) =>
-              updateConfig({ release_ms: parseFloat(e.target.value) })
-            }
+            onChange={(e) => updateConfig({ release_ms: parseFloat(e.target.value) })}
           />
         </label>
       </div>

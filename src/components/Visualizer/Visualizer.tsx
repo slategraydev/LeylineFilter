@@ -9,12 +9,7 @@ interface VisualizerProps {
 export function LeylineLogo() {
   return (
     <div className="logo-container">
-      <svg
-        viewBox="0 0 100 100"
-        className="leyline-svg"
-        role="img"
-        aria-label="Logo"
-      >
+      <svg viewBox="0 0 100 100" className="leyline-svg" role="img" aria-label="Logo">
         <defs>
           <linearGradient id="line-grad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="transparent" />
@@ -62,14 +57,11 @@ export function Visualizer({ isRunning, spectrum, tonality }: VisualizerProps) {
         className="wave-bar"
         style={{
           height: `${height}%`,
-          transition: "height 0.04s cubic-bezier(0.17, 0.67, 0.83, 0.67)",
+          transition: 'height 0.04s cubic-bezier(0.17, 0.67, 0.83, 0.67)',
           // Opacity is now driven by harmonicity (tonality)
           // Tonal sounds (voice) glow more than noise
           opacity: isRunning ? 0.2 + binTonality * 0.8 : 0.2,
-          boxShadow:
-            isRunning && binTonality > 0.5
-              ? "0 0 5px var(--color-mauve)"
-              : "none",
+          boxShadow: isRunning && binTonality > 0.5 ? '0 0 5px var(--color-mauve)' : 'none',
           flex: 1,
         }}
       ></div>
