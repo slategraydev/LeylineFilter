@@ -143,7 +143,7 @@ impl SignalChain {
 mod tests {
     use super::*;
     use crate::core::modules::ModuleFactory;
-    use std::collections::HashMap;
+    use crate::core::persistence::LayoutConfig;
 
     #[test]
     fn test_chain_management() {
@@ -170,9 +170,7 @@ mod tests {
             true,
             None,
             None,
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
+            LayoutConfig::default(),
         );
         assert_eq!(state.modules.len(), 2);
         assert!(state.is_running);
