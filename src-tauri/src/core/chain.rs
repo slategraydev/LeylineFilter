@@ -1,4 +1,10 @@
-// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+// Copyright (c) 2026 Randall Rosas (Slategray).
+// All rights reserved.
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// SIGNAL CHAIN
+// Manager for the sequence, processing, and state synchronization of audio modules.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 use crate::core::traits::{AudioModule, EngineState, ModuleConfig, ModuleInfo};
 

@@ -1,4 +1,10 @@
-// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+// Copyright (c) 2026 Randall Rosas (Slategray).
+// All rights reserved.
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// BACKEND ENTRY POINT
+// Application lifecycle management, Tauri command registration, and global state initialization.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 mod core;
 mod error;

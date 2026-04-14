@@ -1,4 +1,10 @@
-// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+// Copyright (c) 2026 Randall Rosas (Slategray).
+// All rights reserved.
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// AUDIO ENGINE
+// Core orchestrator for audio I/O, stream management, and signal chain execution.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 use crate::core::chain::SignalChain;
 use crate::core::modules::ModuleFactory;
@@ -1114,7 +1120,10 @@ impl AudioEngine {
 
         let actual_out_name = output_device.name().unwrap_or_default();
         let is_virtual_out = actual_out_name.to_lowercase().contains("cable") ||
-                            actual_out_name.to_lowercase().contains("virtual");
+                            actual_out_name.to_lowercase().contains("virtual") ||
+                            actual_out_name.to_lowercase().contains("blackhole") ||
+                            actual_out_name.to_lowercase().contains("monitor") ||
+                            actual_out_name.to_lowercase().contains("pipewire");
 
         let monitoring_enabled_for_out = self.monitoring_enabled.clone();
 
@@ -1241,7 +1250,10 @@ impl AudioEngine {
         //    because the primary output stream already handles the audible audio.
         self.monitor_stream = if monitoring_enabled_flag.load(Ordering::Relaxed) {
             let is_virtual = actual_out.to_lowercase().contains("cable") ||
-                            actual_out.to_lowercase().contains("virtual");
+                            actual_out.to_lowercase().contains("virtual") ||
+                            actual_out.to_lowercase().contains("blackhole") ||
+                            actual_out.to_lowercase().contains("monitor") ||
+                            actual_out.to_lowercase().contains("pipewire");
 
             if is_virtual {
                 let mon_device_opt = host.default_output_device();
