@@ -101,13 +101,17 @@ describe('UI Behavior Tests', () => {
       return {};
     });
 
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 100));
-    });
-
-    const moduleCard = container.querySelector('.module-card') as HTMLElement;
+    await waitFor(
+      () => {
+        const handle = container.querySelector('.resize-handle');
+        if (!handle) throw new Error('Resize handle not found yet');
+        return handle;
+      },
+      { timeout: 2000 },
+    );
 
     const resizeHandle = container.querySelector('.resize-handle') as HTMLElement;
+    const moduleCard = container.querySelector('.module-card') as HTMLElement;
 
     await act(async () => {
       // Start resize

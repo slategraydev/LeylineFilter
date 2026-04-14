@@ -118,12 +118,9 @@ function App() {
   useEffect(() => {
     if (engineState && Object.keys(engineState.positions || {}).length > 0) {
       console.log('Restoring layout from engine state...');
-      // Wrap in a timeout to avoid cascading renders (React 19 rule)
-      setTimeout(() => {
-        setPositions(engineState.positions);
-        setModuleHeights(engineState.heights || {});
-        setModuleWidths(engineState.widths || {});
-      }, 0);
+      setPositions(engineState.positions);
+      setModuleHeights(engineState.heights || {});
+      setModuleWidths(engineState.widths || {});
     }
   }, [engineState]); // Run when engineState arrives or changes
 
@@ -169,40 +166,37 @@ function App() {
   useEffect(() => {
     if (!engineState) return;
 
-    // Wrap in timeout to avoid cascading renders
-    setTimeout(() => {
-      setPositions((prev) => {
-        let changed = false;
-        const addedIds: string[] = [];
-        const next = { ...prev };
+    setPositions((prev) => {
+      let changed = false;
+      const addedIds: string[] = [];
+      const next = { ...prev };
 
-        const currentIds = new Set((engineState.modules || []).map((m) => m.id));
-        Object.keys(next).forEach((id) => {
-          if (!currentIds.has(id)) {
-            delete next[id];
-            changed = true;
-          }
-        });
-
-        engineState.modules?.forEach((m) => {
-          if (!next[m.id]) {
-            const nextSlot = findNextAvailableSlot(next, m.config.type);
-            next[m.id] = nextSlot;
-            addedIds.push(m.id);
-            changed = true;
-          }
-        });
-
-        if (changed) {
-          localStorage.setItem('module_positions_grid', JSON.stringify(next));
-          if (addedIds.length > 0) {
-            setNewlyAddedModuleIds((prevIds) => [...prevIds, ...addedIds]);
-          }
-          return next;
+      const currentIds = new Set((engineState.modules || []).map((m) => m.id));
+      Object.keys(next).forEach((id) => {
+        if (!currentIds.has(id)) {
+          delete next[id];
+          changed = true;
         }
-        return prev;
       });
-    }, 0);
+
+      engineState.modules?.forEach((m) => {
+        if (!next[m.id]) {
+          const nextSlot = findNextAvailableSlot(next, m.config.type);
+          next[m.id] = nextSlot;
+          addedIds.push(m.id);
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        localStorage.setItem('module_positions_grid', JSON.stringify(next));
+        if (addedIds.length > 0) {
+          setNewlyAddedModuleIds((prevIds) => [...prevIds, ...addedIds]);
+        }
+        return next;
+      }
+      return prev;
+    });
   }, [engineState?.modules, findNextAvailableSlot, engineState]);
 
   // Handle flash animation side-effects
