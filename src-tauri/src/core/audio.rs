@@ -210,18 +210,20 @@ impl Default for AudioEngine {
 }
 
 impl AudioEngine {
+    /// Safe wrapper to get the default host, catching potential panics in headless environments.
+    fn get_host() -> Option<cpal::Host> {
+        std::panic::catch_unwind(|| cpal::default_host()).ok()
+    }
+
     pub fn new() -> Self {
         let mut sys = System::new_all();
         sys.refresh_all();
         let pid = sysinfo::get_current_pid().expect("Failed to get current PID");
 
-        // Query hardware for initial UI state
-        let host = cpal::default_host();
-        let (initial_sr, initial_bs) = if let Some(device) = host.default_output_device() {
+        // Query hardware for initial UI state - Safely handle cases where cpal fails in headless CI
+        let (initial_sr, initial_bs) = if let Some(device) = Self::get_host().and_then(|h| h.default_output_device()) {
             if let Ok(config) = device.default_output_config() {
                 let sr = config.sample_rate().0 as f32;
-                // For buffer size, WASAPI Default is often opaque until stream starts,
-                // but we can try to guess or use a sensible default that updates later.
                 (sr, 256)
             } else {
                 (48000.0, 256)
@@ -540,18 +542,24 @@ impl AudioEngine {
     }
 
     pub fn get_input_devices(&self) -> Vec<String> {
-        let host = cpal::default_host();
-        match host.input_devices() {
-            Ok(devices) => devices.filter_map(|d| d.name().ok()).collect(),
-            Err(_) => vec![],
+        if let Some(host) = Self::get_host() {
+            match host.input_devices() {
+                Ok(devices) => devices.filter_map(|d| d.name().ok()).collect(),
+                Err(_) => vec![],
+            }
+        } else {
+            vec![]
         }
     }
 
     pub fn get_output_devices(&self) -> Vec<String> {
-        let host = cpal::default_host();
-        match host.output_devices() {
-            Ok(devices) => devices.filter_map(|d| d.name().ok()).collect(),
-            Err(_) => vec![],
+        if let Some(host) = Self::get_host() {
+            match host.output_devices() {
+                Ok(devices) => devices.filter_map(|d| d.name().ok()).collect(),
+                Err(_) => vec![],
+            }
+        } else {
+            vec![]
         }
     }
 
@@ -598,7 +606,9 @@ impl AudioEngine {
             self.stop();
         }
 
-        let host = cpal::default_host();
+        let host = Self::get_host().ok_or_else(|| {
+            EngineError::DeviceError("No audio host available (drivers missing or CI)".to_string())
+        })?;
 
         log::info!("Using audio host: {:?}", host.id());
 
