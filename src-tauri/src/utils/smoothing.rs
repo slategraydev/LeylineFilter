@@ -1,3 +1,10 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// PARAMETER SMOOTHING
+// One-pole low-pass filter for artifact-free DSP parameter transitions.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 /// A utility for smoothing parameter changes in the audio thread to prevent clicks and pops.
 ///
 /// It uses a simple one-pole low-pass filter (exponential smoothing) to ramp
