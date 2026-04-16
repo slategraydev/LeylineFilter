@@ -215,10 +215,14 @@ impl AudioEngine {
     }
 
     pub fn new() -> Self {
-        let mut sys = System::new_all();
-        sys.refresh_all();
-        let pid = sysinfo::get_current_pid().expect("Failed to get current PID");
+        log::info!("Initializing AudioEngine...");
+        let mut sys = System::new();
+        sys.refresh_cpu_usage();
+        let pid = std::panic::catch_unwind(|| {
+            sysinfo::get_current_pid().ok()
+        }).ok().flatten().unwrap_or(sysinfo::Pid::from(0));
 
+        log::info!("AudioEngine: Querying hardware for initial state...");
         // Query hardware for initial UI state - Safely handle cases where cpal fails in headless CI
         let (initial_sr, initial_bs) = if let Some(device) = Self::get_host().and_then(|h| h.default_output_device()) {
             if let Ok(config) = device.default_output_config() {
@@ -231,6 +235,7 @@ impl AudioEngine {
             (48000.0, 256)
         };
 
+        log::info!("AudioEngine: Initial sample rate: {}Hz, buffer size: {}", initial_sr, initial_bs);
         let offline_chain = Arc::new(Mutex::new(SignalChain::new(initial_sr)));
 
         Self {
@@ -588,8 +593,9 @@ impl AudioEngine {
     pub fn process_garbage(&self) {
         if let Some(rx) = &self.garbage_rx {
             // Drain the channel and drop modules on this thread (Main Thread)
-            while rx.try_recv().is_ok() {
-                // Module is dropped here
+            while let Ok(module) = rx.try_recv() {
+                log::info!("Garbage collecting module: {} ({})", module.name(), module.id());
+                drop(module);
             }
         }
     }
@@ -1478,6 +1484,7 @@ mod tests {
 
     #[test]
     fn test_garbage_collection_mechanism() {
+        let _ = env_logger::builder().is_test(true).try_init();
         let mut engine = AudioEngine::new();
         let (tx, rx) = unbounded();
         engine.garbage_rx = Some(rx);
