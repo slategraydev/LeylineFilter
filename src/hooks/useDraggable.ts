@@ -1,5 +1,10 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// DRAGGABLE HOOK
+// Logic for handling grid-based dragging of audio modules.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { GRID_UNIT_PX } from '../constants';
 import { GridPosition } from '../types';

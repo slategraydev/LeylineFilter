@@ -1,61 +1,68 @@
+/* Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved. */
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   ADD MODULE MENU STYLES
+   Styling for the module selection overlay.
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
 .add-module-menu {
-    position: fixed;
-    bottom: 90px;
-    right: 20px;
-    background: #0a0a0a;
-    border: 1px solid var(--color-accent);
-    width: 220px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
-    z-index: 1001;
-    display: flex;
-    flex-direction: column;
-    animation: menu-slide-up 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+  position: fixed;
+  bottom: 90px;
+  right: 20px;
+  background: #0a0a0a;
+  border: 1px solid var(--color-accent);
+  width: 220px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  animation: menu-slide-up 0.2s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 @keyframes menu-slide-up {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
 
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .menu-items {
-    display: flex;
-    flex-direction: column;
-    padding: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
 }
 
 .menu-item {
-    background: none;
-    border: none;
-    padding: 10px 16px;
-    text-align: left;
-    color: var(--color-text-dim);
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.1s ease-out;
-    border-left: 2px solid transparent;
+  background: none;
+  border: none;
+  padding: 10px 16px;
+  text-align: left;
+  color: var(--color-text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.1s ease-out;
+  border-left: 2px solid transparent;
 }
 
 .menu-item:hover {
-    background: #151515;
-    color: var(--color-accent);
-    border-left-color: var(--color-accent);
-    padding-left: 18px;
+  background: #151515;
+  color: var(--color-accent);
+  border-left-color: var(--color-accent);
+  padding-left: 18px;
 }
 
 .no-modules-msg {
-    padding: 20px;
-    text-align: center;
-    color: var(--color-text-dim);
-    font-size: 0.75rem;
-    font-style: italic;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+  padding: 20px;
+  text-align: center;
+  color: var(--color-text-dim);
+  font-size: 0.75rem;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }

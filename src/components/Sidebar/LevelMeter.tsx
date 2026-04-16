@@ -1,5 +1,10 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// LEVEL METER
+// UI component for displaying real-time signal levels.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 import { useEffect, useRef, useState } from 'react';
 import './LevelMeter.css';
 

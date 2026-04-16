@@ -1,3 +1,10 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// RNNOISE MODULE
+// AI-based noise suppression using the RNNoise algorithm.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 use crate::core::traits::{AudioModule, ModuleCategory, ModuleConfig};
 use crate::utils::resampling::AudioBlockProcessor;
 use crate::utils::smoothing::ParameterSmoother;

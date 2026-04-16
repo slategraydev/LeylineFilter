@@ -1,5 +1,10 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// LAYOUT UTILS
+// Helpers for grid-based layout calculations.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 import { GridPosition } from '../types';
 import { GAP_UNITS, MODULE_W_UNITS } from '../constants';
 

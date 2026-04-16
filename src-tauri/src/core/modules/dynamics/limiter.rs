@@ -1,5 +1,12 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// LIMITER MODULE
+// Dynamics processing to prevent signal clipping.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 use crate::core::traits::{AudioModule, ModuleCategory, ModuleConfig};
 use crate::utils::smoothing::ParameterSmoother;
 use std::collections::VecDeque;

@@ -1,3 +1,10 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// ENGINE CONTROLS
+// Transport controls and global engine state toggles.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 import './EngineControls.css';
 
 interface EngineControlsProps {

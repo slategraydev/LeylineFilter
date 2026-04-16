@@ -1,5 +1,10 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// ENGINE HOOK
+// Orchestrates interaction with the Rust audio engine.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { EngineMetrics, EngineState } from '../types';

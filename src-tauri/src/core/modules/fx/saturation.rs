@@ -1,3 +1,10 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// SATURATION MODULE
+// Harmonic distortion/saturation module.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 use crate::core::traits::{AudioModule, ModuleCategory, ModuleConfig};
 use crate::utils::smoothing::ParameterSmoother;
 use std::f32::consts::PI;

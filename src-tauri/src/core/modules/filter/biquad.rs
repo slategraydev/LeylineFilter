@@ -1,3 +1,10 @@
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// BIQUAD FILTER
+// Implementation of standard biquad filter topologies.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 use crate::core::traits::{AudioModule, ModuleCategory, ModuleConfig};
 use crate::utils::smoothing::ParameterSmoother;
 use std::f32::consts::PI;

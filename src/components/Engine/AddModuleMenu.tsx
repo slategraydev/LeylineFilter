@@ -1,5 +1,10 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// ADD MODULE MENU
+// Modal for selecting and adding new audio modules to the chain.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 import './AddModuleMenu.css';
 
 interface AddModuleMenuProps {

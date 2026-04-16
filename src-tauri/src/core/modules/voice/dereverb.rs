@@ -1,5 +1,12 @@
 // Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// DEREVERB MODULE
+// De-reverberation processing for voice signals.
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 use crate::core::traits::{AudioModule, ModuleCategory, ModuleConfig};
 use crate::utils::smoothing::ParameterSmoother;
 use uuid::Uuid;

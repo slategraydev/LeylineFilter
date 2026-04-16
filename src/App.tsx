@@ -1,9 +1,8 @@
-// Copyright (c) 2026 Randall Rosas (Slategray).
-// All rights reserved.
+// Copyright (c) 2026 Randall Rosas (Slategray). All rights reserved.
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // FRONTEND CORE
-// Main application entry point, state management, and modular layout coordination.
+// Root application component and layout orchestration.
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import { useState, useEffect, useCallback } from 'react';
