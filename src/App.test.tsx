@@ -29,6 +29,7 @@ describe('App Smoke Test', () => {
       },
     ],
     is_running: false,
+    monitoring_enabled: false,
     sample_rate: 48000,
   };
 

@@ -46,7 +46,7 @@ export function useEngine() {
     invoke<EngineState>('get_engine_state').then((state) => {
       setEngineState(state);
       setIsRunning(state.is_running);
-      setIsMonitoring(state.monitoring_enabled);
+      setIsMonitoring(state.monitoring_enabled ?? false);
       setSelectedInput(state.input_device ?? 'Default');
       setSelectedOutput(state.output_device ?? 'Default');
     });
