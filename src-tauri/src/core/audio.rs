@@ -223,19 +223,11 @@ impl AudioEngine {
             .flatten()
             .unwrap_or(sysinfo::Pid::from(0));
 
-        log::info!("AudioEngine: Querying hardware for initial state...");
-        // Query hardware for initial UI state - Safely handle cases where cpal fails in headless CI
-        let (initial_sr, initial_bs) =
-            if let Some(device) = Self::get_host().and_then(|h| h.default_output_device()) {
-                if let Ok(config) = device.default_output_config() {
-                    let sr = config.sample_rate().0 as f32;
-                    (sr, 256)
-                } else {
-                    (48000.0, 256)
-                }
-            } else {
-                (48000.0, 256)
-            };
+        // Use safe defaults for construction. The true device config is resolved
+        // in start() where cpal is called exactly once per engine lifetime.
+        // Querying cpal here caused repeated COM init/teardown on Windows,
+        // corrupting WASAPI state in sequential test runs.
+        let (initial_sr, initial_bs) = (48000.0_f32, 256_u32);
 
         log::info!("AudioEngine: Initial sample rate: {initial_sr}Hz, buffer size: {initial_bs}");
         let offline_chain = Arc::new(Mutex::new(SignalChain::new(initial_sr)));
